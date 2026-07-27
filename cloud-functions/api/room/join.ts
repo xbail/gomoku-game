@@ -35,6 +35,10 @@ export async function onRequest(context: { request: Request }) {
 
     room.players.white = { nickname };
     room.status = "playing";
+    // 对局开始：初始化回合计时
+    room.turnStartAt = Date.now();
+    room.blackUsedMs = 0;
+    room.whiteUsedMs = 0;
 
     await saveRoom(room);
 

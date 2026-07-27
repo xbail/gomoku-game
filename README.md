@@ -178,16 +178,29 @@ TTL（基于 `lastActiveAt`，见 `list.ts`）：
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| POST | `/create` | 创建房间。body: `{ nickname }`。返回完整 Room。 |
+| POST | `/create` | 创建房间。body: `{ nickname, forbid?, timed? }`。`forbid`/`timed` 默认 true。返回完整 Room。 |
 | POST | `/join` | 加入房间成为白方。body: `{ roomId, nickname }`。强一致校验房间仍为 waiting 且白方空缺，否则返回“房间已满”。 |
 | POST | `/leave` | 玩家主动离开。body: `{ roomId, nickname }`。玩家离开即删除房间。 |
 | GET  | `/list` | 返回大厅列表 `{ waiting: [...], playing: [...] }`，并顺带执行 TTL 回收。 |
-| GET  | `/state?roomId=xxx&observer=1` | 拉取房间最新状态。非观战者会更新心跳 `lastActiveAt`（30s 节流）。 |
-| POST | `/move` | 落子。body: `{ roomId, nickname, row, col }`。校验回合归属、位置有效性，判定胜负并写排行榜。 |
-| POST | `/reset` | 再来一局。body: `{ roomId, nickname }`。清空棋盘；白方仍在则 playing，否则 waiting。 |
+| GET  | `/state?roomId=xxx&observer=1` | 拉取房间最新状态。非观战者更新心跳，并顺带检查超时判负。 |
+| POST | `/move` | 落子。body: `{ roomId, nickname, row, col }`。校验回合/位置/禁手，判定胜负并写排行榜。 |
+| POST | `/request` | 悔棋/求和/再来一局（双向确认）。body: `{ roomId, nickname, action, type? }`。见下表。 |
+| POST | `/action` | 认输。body: `{ roomId, nickname, action:'resign' }`。 |
 | POST | `/rejoin` | 断线重进校验。body: `{ roomId, nickname }`。仅本局玩家可重进。 |
 | GET  | `/chat?roomId=xxx` | 获取局内聊天。 |
 | POST | `/chat` | 发送聊天。body: `{ roomId, nickname, type:'emoji'|'text', content }`。 |
+
+#### `/request` 接口动作说明
+
+`action` 取值：`request`（发起）/ `accept`（同意）/ `decline`（拒绝）/ `cancel`（取消，仅发起方）。
+
+| type | 可发起阶段 | 接受后效果 |
+| --- | --- | --- |
+| `undo` | playing | 撤回最后一步，回合回到落子方 |
+| `draw` | playing | 直接平局 |
+| `reset` | finished | 清空棋盘再来一局 |
+
+存在未决请求时，落子接口会拒绝（需先处理请求）。
 
 ### 登录 `/api/auth/*`
 
@@ -248,6 +261,58 @@ EdgeOne Blob Storage 的 `get(key)` 默认是**最终一致**读取，`get(key, 
 ### 附带：`reset.ts` 强一致化
 
 “再来一局”同样属于变更路径，原为弱读，一并改为 `getRoomStrong`，避免基于陈旧数据误判权限/状态。
+
+## 对局规则（v2 新增）
+
+本版本将对局从"自由五子棋"升级为接近竞技连珠的正规规则：
+
+### 黑方禁手
+
+创建房间默认启用禁手（`forbid: true`）。黑方落子若形成以下任一形态，判黑方负、白方胜：
+
+| 禁手 | 说明 |
+| --- | --- |
+| 长连 | 任一方向连续同色 ≥ 6 |
+| 四四 | 同时形成两个「四」（活四/冲四） |
+| 三三 | 同时形成两个「活三」 |
+
+判定逻辑见 `cloud-functions/api/room/_game.ts` 的 `checkForbidden`。白方不受禁手限制，长连仍判胜。
+
+### 计时
+
+创建房间默认启用计时（`timed: true`），配置为：每步 30 秒 + 总时长 10 分钟。任一项超时即判超时方负。
+
+- 计时由后端在 `move.ts`（落子时）和 `state.ts`（轮询时）两处检查，保证即使一方挂机也能判负。
+- 前端在玩家信息条实时显示剩余时间（每步/总时长）。
+
+### 悔棋 / 求和 / 认输 / 再来一局
+
+对局进行中，玩家可发起：
+- **悔棋**：撤回最后一步，回合回到落子方。需对手同意。
+- **求和**：直接判平局。需对手同意。
+- **认输**：发起方直接判负，无需对手确认。
+
+对局结束后可发起**再来一局**（reset），同样需对手同意——此前 reset 是任一方单方面触发，现改为双向确认。
+
+所有"需对手同意"的操作走 `/api/room/request` 接口，形成 `ConsentRequest` 记录挂载在房间上。存在未决请求时，落子接口会拒绝，必须先处理请求（同意/拒绝/取消）。前端在房间页顶部展示请求横幅。
+
+### 获胜连线高亮
+
+判定胜负时记录 `winLine`（5 连坐标），前端在棋盘上高亮获胜的 5 子。
+
+### 棋谱记录
+
+每步落子记录到 `room.moves`（含坐标、颜色、时间），用于悔棋回退与未来复盘功能。
+
+### 测试
+
+禁手算法附带单元测试：
+
+```bash
+npx tsx scripts/test-forbid.ts
+```
+
+覆盖长连、恰五连、三三、四四、白方豁免等场景。
 
 ## 本地开发
 

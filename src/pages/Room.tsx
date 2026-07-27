@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import Board from '../components/Board'
 import ChatPanel from '../components/ChatPanel'
-import { getRoomState, makeMove, resetRoom, saveMyRoom, getChat, leaveRoom } from '../api'
+import { getRoomState, makeMove, saveMyRoom, getChat, leaveRoom, requestAction, resign } from '../api'
 import { playStoneSound } from '../sound'
-import type { Room as RoomType, PlayerColor, CellState, ChatMessage } from '../types'
+import type { Room as RoomType, PlayerColor, CellState, ChatMessage, RequestType } from '../types'
 
 interface RoomProps {
   room: RoomType
@@ -14,12 +14,36 @@ interface RoomProps {
 
 const POLL_INTERVAL = 500
 
+function fmtMs(ms: number): string {
+  if (!isFinite(ms)) return '∞'
+  const s = Math.max(0, Math.floor(ms / 1000))
+  const m = Math.floor(s / 60)
+  const r = s % 60
+  return `${m}:${r.toString().padStart(2, '0')}`
+}
+
+// 前端计算某方剩余时间（用于流畅显示，非权威）
+function remaining(room: RoomType, color: PlayerColor): { perMove: number; total: number } | null {
+  if (!room.timer) return null
+  const now = Date.now()
+  const used = color === 'black' ? (room.blackUsedMs ?? 0) : (room.whiteUsedMs ?? 0)
+  const total = room.timer.totalMs > 0 ? Math.max(0, room.timer.totalMs - used) : Infinity
+  let perMove = room.timer.perMoveMs > 0 ? room.timer.perMoveMs : Infinity
+  if (color === room.currentTurn && room.turnStartAt && !room.winner) {
+    perMove = Math.max(0, perMove - (now - room.turnStartAt))
+  }
+  return { perMove, total }
+}
+
 export default function Room({ room: initialRoom, nickname, onLeave, isObserver }: RoomProps) {
   const [room, setRoom] = useState<RoomType>(initialRoom)
   const [lastMove, setLastMove] = useState<[number, number] | null>(null)
   const [copied, setCopied] = useState(false)
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>(room.messages || [])
+  const [notice, setNotice] = useState<string | null>(null)
+  const [, setTick] = useState(0)  // 触发计时重渲染
   const pollingRef = useRef<ReturnType<typeof setInterval>>(undefined)
+  const tickRef = useRef<ReturnType<typeof setInterval>>(undefined)
 
   const myColor: PlayerColor | null = isObserver
     ? null
@@ -27,7 +51,6 @@ export default function Room({ room: initialRoom, nickname, onLeave, isObserver 
     : room.players.white?.nickname === nickname ? 'white'
     : null
 
-  // Save room for rejoin on enter (observers don't save)
   useEffect(() => { if (!isObserver) saveMyRoom(room.id) }, [room.id, isObserver])
 
   const doPoll = useCallback(async () => {
@@ -35,7 +58,6 @@ export default function Room({ room: initialRoom, nickname, onLeave, isObserver 
     if (res.ok && res.data) {
       setRoom(prev => {
         const next = res.data as RoomType
-        // Detect a newly placed stone and highlight + play sound
         if (countOccupied(next.board) > countOccupied(prev.board)) {
           const move = findNewMove(prev.board, next.board)
           if (move) {
@@ -50,8 +72,15 @@ export default function Room({ room: initialRoom, nickname, onLeave, isObserver 
 
   useEffect(() => {
     pollingRef.current = setInterval(doPoll, POLL_INTERVAL)
-    return () => { if (pollingRef.current) clearInterval(pollingRef.current) }
-  }, [doPoll])
+    // 计时秒级刷新
+    if (room.timer && (room.timer.perMoveMs > 0 || room.timer.totalMs > 0)) {
+      tickRef.current = setInterval(() => setTick(t => t + 1), 1000)
+    }
+    return () => {
+      if (pollingRef.current) clearInterval(pollingRef.current)
+      if (tickRef.current) clearInterval(tickRef.current)
+    }
+  }, [doPoll, room.timer])
 
   const scheduleForcePoll = useRef<ReturnType<typeof setTimeout>>(undefined)
 
@@ -65,6 +94,9 @@ export default function Room({ room: initialRoom, nickname, onLeave, isObserver 
       playStoneSound()
       if (scheduleForcePoll.current) clearTimeout(scheduleForcePoll.current)
       scheduleForcePoll.current = setTimeout(() => doPoll(), 100)
+    } else {
+      setNotice(res.error || '落子失败')
+      setTimeout(() => setNotice(null), 2500)
     }
   }
 
@@ -73,7 +105,6 @@ export default function Room({ room: initialRoom, nickname, onLeave, isObserver 
     if (res.ok && res.data) setChatMessages(res.data)
   }, [room.id])
 
-  // Chat polling
   useEffect(() => {
     if (room.status === 'waiting') return
     refreshChat()
@@ -81,11 +112,42 @@ export default function Room({ room: initialRoom, nickname, onLeave, isObserver 
     return () => clearInterval(t)
   }, [room.status, refreshChat])
 
-  const handleReset = async () => {
-    const res = await resetRoom(room.id, nickname)
+  // ===== 请求类操作（悔棋/求和/再来一局）=====
+  const sendRequest = async (type: RequestType) => {
+    const res = await requestAction(room.id, nickname, 'request', type)
     if (res.ok && res.data) {
       setRoom(res.data)
-      setLastMove(null)
+    } else {
+      setNotice(res.error || '操作失败')
+      setTimeout(() => setNotice(null), 2500)
+    }
+  }
+
+  const respondRequest = async (accept: boolean) => {
+    if (!room.request) return
+    const res = await requestAction(room.id, nickname, accept ? 'accept' : 'decline')
+    if (res.ok && res.data) {
+      setRoom(res.data)
+      if (accept && room.request?.type === 'reset') setLastMove(null)
+    } else {
+      setNotice(res.error || '操作失败')
+      setTimeout(() => setNotice(null), 2500)
+    }
+  }
+
+  const cancelRequest = async () => {
+    if (!room.request) return
+    const res = await requestAction(room.id, nickname, 'cancel')
+    if (res.ok && res.data) setRoom(res.data)
+  }
+
+  const handleResign = async () => {
+    if (!confirm('确认认输？')) return
+    const res = await resign(room.id, nickname)
+    if (res.ok && res.data) setRoom(res.data)
+    else {
+      setNotice(res.error || '认输失败')
+      setTimeout(() => setNotice(null), 2500)
     }
   }
 
@@ -105,25 +167,32 @@ export default function Room({ room: initialRoom, nickname, onLeave, isObserver 
   }
 
   const handleLeave = () => {
-    // 玩家身份退出：通知后端清理房间；观战者直接退出
     if (!isObserver && nickname) {
       try {
         if (navigator.sendBeacon) {
           const blob = new Blob([JSON.stringify({ roomId: room.id, nickname })], { type: 'application/json' })
           navigator.sendBeacon('/api/room/leave', blob)
         } else {
-          // 回退：fire-and-forget
           leaveRoom(room.id, nickname).catch(() => {})
         }
-      } catch {
-        // 忽略，不影响退出
-      }
+      } catch {}
     }
     onLeave()
   }
 
   const isWaiting = room.status === 'waiting'
   const isGameOver = !!room.winner
+  const hasRequest = !!room.request
+  const isMyRequest = room.request?.from === myColor
+  const requestToMe = room.request?.to === myColor
+
+  const reqLabel: Record<RequestType, string> = {
+    undo: '悔棋',
+    draw: '求和',
+    reset: '再来一局',
+  }
+
+  const myTime = myColor ? remaining(room, myColor) : null
 
   return (
     <div className="min-h-screen min-h-dvh flex flex-col animate-slide-up">
@@ -138,12 +207,11 @@ export default function Room({ room: initialRoom, nickname, onLeave, isObserver 
 
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1.5 bg-indigo-50 rounded-full px-3 py-1">
-            <svg className="w-3.5 h-3.5 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-            </svg>
             <span className="text-sm font-mono tracking-wider text-indigo-600">{room.id}</span>
           </div>
-
+          {room.forbid && (
+            <span className="text-[10px] px-1.5 py-px rounded-full bg-rose-50 text-rose-600 border border-rose-200 shrink-0">禁手</span>
+          )}
           <button
             onClick={handleCopyRoomId}
             className={`text-xs px-2.5 py-1 rounded-full border border-gray-300 text-gray-500 hover:text-gray-800 hover:border-gray-400 transition cursor-pointer ${isObserver ? 'hidden' : ''}`}
@@ -157,22 +225,29 @@ export default function Room({ room: initialRoom, nickname, onLeave, isObserver 
       {isObserver && (
         <div className="flex justify-center shrink-0 py-1">
           <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-[11px] font-medium">
-            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-            </svg>
             观战模式 · 只读不参与
           </div>
         </div>
       )}
 
-      {/* Player info strip */}
+      {/* Notice toast */}
+      {notice && (
+        <div className="flex justify-center shrink-0 py-1 px-4">
+          <div className="px-3 py-1 rounded-full bg-red-50 text-red-600 border border-red-200 text-[11px] font-medium">
+            {notice}
+          </div>
+        </div>
+      )}
+
+      {/* Player info strip with timer */}
       <div className="flex items-center justify-between px-3 py-2.5 border-b border-gray-100 bg-gray-50/80 shrink-0">
         <PlayerInfo
           nickname={room.players.black.nickname}
           color="black"
           isActive={room.currentTurn === 'black' && !isGameOver}
           isMe={myColor === 'black'}
+          isWaiting={isWaiting}
+          time={remaining(room, 'black')}
         />
         <span className="text-xs font-bold text-gray-300 tracking-wider">VS</span>
         <PlayerInfo
@@ -181,8 +256,27 @@ export default function Room({ room: initialRoom, nickname, onLeave, isObserver 
           isActive={room.currentTurn === 'white' && !isGameOver}
           isMe={myColor === 'white'}
           isWaiting={isWaiting}
+          time={remaining(room, 'white')}
         />
       </div>
+
+      {/* Request banner */}
+      {hasRequest && !isObserver && (
+        <div className="flex justify-center shrink-0 py-2 px-4">
+          {isMyRequest ? (
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-xs font-medium">
+              已发起「{reqLabel[room.request!.type]}」请求，等待对手回应
+              <button onClick={cancelRequest} className="px-2 py-0.5 rounded-full bg-white text-gray-500 border border-gray-200 text-[11px] cursor-pointer hover:bg-gray-50">取消</button>
+            </div>
+          ) : requestToMe ? (
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-xs font-medium">
+              对手请求「{reqLabel[room.request!.type]}」
+              <button onClick={() => respondRequest(true)} className="px-2.5 py-0.5 rounded-full bg-green-600 text-white text-[11px] cursor-pointer hover:bg-green-500">同意</button>
+              <button onClick={() => respondRequest(false)} className="px-2.5 py-0.5 rounded-full bg-white text-gray-600 border border-gray-200 text-[11px] cursor-pointer hover:bg-gray-50">拒绝</button>
+            </div>
+          ) : null}
+        </div>
+      )}
 
       {/* Status pill */}
       <div className="flex justify-center shrink-0 pt-2.5 pb-1">
@@ -200,24 +294,6 @@ export default function Room({ room: initialRoom, nickname, onLeave, isObserver 
             ? 'bg-gray-100 text-gray-500 border-gray-200'
             : ''}
         `}>
-          {isWaiting && (
-            <span className="relative flex h-1.5 w-1.5">
-              <span className="animate-ping absolute h-full w-full rounded-full bg-blue-400 opacity-75" />
-              <span className="relative rounded-full h-1.5 w-1.5 bg-blue-500" />
-            </span>
-          )}
-          {isGameOver && room.winner && room.winner !== 'draw' && (
-            <svg className="w-3.5 h-3.5 text-amber-500" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5z"/>
-            </svg>
-          )}
-          {isGameOver && room.winner === 'draw' && '🤝'}
-          {!isGameOver && room.currentTurn === myColor && !isWaiting && (
-            <span className="relative flex h-1.5 w-1.5">
-              <span className="animate-ping absolute h-full w-full rounded-full bg-green-400 opacity-75" />
-              <span className="relative rounded-full h-1.5 w-1.5 bg-green-500" />
-            </span>
-          )}
           {statusText(room, myColor)}
         </div>
       </div>
@@ -231,6 +307,7 @@ export default function Room({ room: initialRoom, nickname, onLeave, isObserver 
           winner={room.winner}
           onCellClick={handleCellClick}
           lastMove={lastMove}
+          winLine={room.winLine}
           readOnly={isObserver}
         />
       </div>
@@ -242,25 +319,55 @@ export default function Room({ room: initialRoom, nickname, onLeave, isObserver 
 
       {/* Bottom action area */}
       <div className="shrink-0 pb-5 pt-2 flex flex-col items-center gap-2">
-        {isGameOver && !isObserver && (
+        {/* 游戏进行中的动作：悔棋 / 求和 / 认输 */}
+        {!isGameOver && !isWaiting && !isObserver && !hasRequest && (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => sendRequest('undo')}
+              disabled={(room.moves?.length ?? 0) === 0}
+              className="px-3 py-1.5 text-xs rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
+            >
+              悔棋
+            </button>
+            <button
+              onClick={() => sendRequest('draw')}
+              className="px-3 py-1.5 text-xs rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition cursor-pointer"
+            >
+              求和
+            </button>
+            <button
+              onClick={handleResign}
+              className="px-3 py-1.5 text-xs rounded-lg border border-red-200 text-red-500 hover:bg-red-50 transition cursor-pointer"
+            >
+              认输
+            </button>
+          </div>
+        )}
+        {/* 已结束：再来一局（双向确认） */}
+        {isGameOver && !isObserver && !hasRequest && (
           <button
-            onClick={handleReset}
+            onClick={() => sendRequest('reset')}
             className="flex items-center gap-2 px-10 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-xl text-sm font-semibold shadow-lg shadow-indigo-900/20 transition-all active:scale-95 cursor-pointer"
           >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
             再来一局
           </button>
         )}
         {!isGameOver && !isWaiting && !isObserver && (
           <div className="text-[11px] text-gray-400 font-medium tracking-wide">
             {room.currentTurn === myColor ? '请在棋盘上落子' : '等待对手落子...'}
+            {myTime && myTime.perMove !== Infinity && (
+              <span className="ml-2 text-gray-300">· 剩余 {fmtMs(myTime.perMove)}</span>
+            )}
           </div>
         )}
         {isWaiting && !isObserver && (
           <div className="text-[11px] text-gray-400 font-medium tracking-wide">
             将房间 ID 分享给好友
+          </div>
+        )}
+        {isObserver && (
+          <div className="text-[11px] text-gray-400 font-medium tracking-wide">
+            观战中
           </div>
         )}
       </div>
@@ -273,19 +380,18 @@ function statusText(room: RoomType, myColor: PlayerColor | null): string {
   if (room.winner === 'draw') return '平局'
   if (room.winner === 'black') return `${room.players.black.nickname} 获胜!`
   if (room.winner === 'white') return `${room.players.white?.nickname} 获胜!`
+  if (room.timeLoser) return '超时判负'
   if (myColor === null) return '观战中'
   if (room.currentTurn === myColor) return '你的回合'
   return '对手回合'
 }
 
-// 统计棋盘上已落子数
 function countOccupied(board: CellState[][]): number {
   let n = 0
   for (const row of board) for (const c of row) if (c) n++
   return n
 }
 
-// 找出新增落子的位置
 function findNewMove(prev: CellState[][], next: CellState[][]): [number, number] | null {
   for (let r = 0; r < next.length; r++) {
     for (let c = 0; c < next[r].length; c++) {
@@ -296,13 +402,14 @@ function findNewMove(prev: CellState[][], next: CellState[][]): [number, number]
 }
 
 function PlayerInfo({
-  nickname, color, isActive, isMe, isWaiting,
+  nickname, color, isActive, isMe, isWaiting, time,
 }: {
   nickname: string | null
   color: PlayerColor
   isActive: boolean
   isMe: boolean
   isWaiting?: boolean
+  time: { perMove: number; total: number } | null
 }) {
   const name = nickname || '等待中...'
   return (
@@ -325,15 +432,22 @@ function PlayerInfo({
         )}
       </div>
 
-      <span className={`text-xs font-medium truncate ${isActive ? 'text-gray-800' : 'text-gray-400'} ${isWaiting ? 'text-gray-300 italic' : ''}`}>
-        {name}
-      </span>
-
-      {isMe && (
-        <span className="text-[9px] px-1 py-px rounded bg-indigo-100 text-indigo-600 border border-indigo-200 shrink-0 font-semibold">
-          ME
+      <div className="flex-1 min-w-0">
+        <span className={`text-xs font-medium truncate ${isActive ? 'text-gray-800' : 'text-gray-400'} ${isWaiting ? 'text-gray-300 italic' : ''} block`}>
+          {name}
+          {isMe && (
+            <span className="ml-1 text-[9px] px-1 py-px rounded bg-indigo-100 text-indigo-600 border border-indigo-200 shrink-0 font-semibold align-middle">
+              ME
+            </span>
+          )}
         </span>
-      )}
+        {time && time.perMove !== Infinity && (
+          <span className={`text-[10px] ${isActive ? 'text-red-500' : 'text-gray-300'} font-mono`}>
+            {fmtMs(time.perMove)}
+            {time.total !== Infinity && <span className="text-gray-300"> / {fmtMs(time.total)}</span>}
+          </span>
+        )}
+      </div>
     </div>
   )
 }

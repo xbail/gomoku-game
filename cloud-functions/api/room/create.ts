@@ -1,8 +1,11 @@
 import { getRoom, saveRoom } from "./_utils";
 import { createEmptyBoard } from "./_game";
+import { DEFAULT_TIMER, NO_TIMER } from "./_timer";
 
 interface CreateBody {
   nickname: string;
+  forbid?: boolean;     // 是否启用黑方禁手规则，默认 true
+  timed?: boolean;      // 是否启用计时，默认 true
 }
 
 function generateRoomId(): string {
@@ -25,11 +28,17 @@ export async function onRequest(context: { request: Request }) {
       return new Response(JSON.stringify({ ok: false, error: "昵称不能为空" }), { status: 400 });
     }
 
+    // 默认启用禁手与计时
+    const forbid = body.forbid !== false;
+    const timed = body.timed !== false;
+    const timer = timed ? { ...DEFAULT_TIMER } : { ...NO_TIMER };
+
     let roomId: string;
     do {
       roomId = generateRoomId();
     } while (await getRoom(roomId));
 
+    const now = Date.now();
     const room = {
       id: roomId,
       players: {
@@ -39,8 +48,17 @@ export async function onRequest(context: { request: Request }) {
       board: createEmptyBoard(),
       currentTurn: "black",
       winner: null,
+      winLine: null,
       status: "waiting",
-      createdAt: Date.now(),
+      createdAt: now,
+      moves: [] as unknown[],
+      request: null,
+      forbid,
+      timer,
+      turnStartAt: now,
+      blackUsedMs: 0,
+      whiteUsedMs: 0,
+      timeLoser: null,
     };
 
     await saveRoom(room);

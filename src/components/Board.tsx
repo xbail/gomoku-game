@@ -8,6 +8,7 @@ interface BoardProps {
   winner: PlayerColor | 'draw' | null
   onCellClick: (row: number, col: number) => void
   lastMove: [number, number] | null
+  winLine?: [number, number][] | null
   readOnly?: boolean
 }
 
@@ -15,7 +16,7 @@ const N = 15
 const GAPS = N - 1
 const FRAME_PX = 4
 
-export default function Board({ board, currentTurn, myColor, winner, onCellClick, lastMove, readOnly }: BoardProps) {
+export default function Board({ board, currentTurn, myColor, winner, onCellClick, lastMove, winLine, readOnly }: BoardProps) {
   const isMyTurn = myColor === currentTurn && !winner
   const interactive = !readOnly
   const [toast, setToast] = useState<string | null>(null)
@@ -113,6 +114,7 @@ export default function Board({ board, currentTurn, myColor, winner, onCellClick
               const isLast = lastMove?.[0] === ri && lastMove?.[1] === ci
               const isSelected = selectedCell?.[0] === ri && selectedCell?.[1] === ci
               const canPlace = !cell && !winner && isMyTurn && interactive
+              const isWinCell = winLine?.some(([r, c]) => r === ri && c === ci)
 
               return (
                 <div
@@ -150,7 +152,7 @@ export default function Board({ board, currentTurn, myColor, winner, onCellClick
 
                     {/* Stone */}
                     {cell && (
-                      <div className={`absolute rounded-full ${cell === 'black' ? 'stone-black' : 'stone-white'}`}
+                      <div className={`absolute rounded-full ${cell === 'black' ? 'stone-black' : 'stone-white'} ${isWinCell ? 'ring-2 ring-amber-400 ring-offset-1 ring-offset-amber-300/40 shadow-lg shadow-amber-400/50' : ''}`}
                         style={{ width: '82%', height: '82%' }}
                       >
                         {isLast && (

@@ -1,4 +1,4 @@
-import type { ApiResponse, Room, RoomList, LoginUrlResult, UserInfo, ChatMessage, LeaderboardEntry } from './types'
+import type { ApiResponse, Room, RoomList, LoginUrlResult, UserInfo, ChatMessage, LeaderboardEntry, RequestType } from './types'
 
 const BASE = '/api/room'
 
@@ -34,10 +34,15 @@ export function removeMyRoom(roomId: string) {
   localStorage.setItem(MY_ROOMS_KEY, JSON.stringify(list.filter(id => id !== roomId)))
 }
 
-export function createRoom(nickname: string) {
+export interface CreateRoomOptions {
+  forbid?: boolean    // 默认 true
+  timed?: boolean     // 默认 true
+}
+
+export function createRoom(nickname: string, opts?: CreateRoomOptions) {
   return request<Room>(`${BASE}/create`, {
     method: 'POST',
-    body: JSON.stringify({ nickname }),
+    body: JSON.stringify({ nickname, forbid: opts?.forbid, timed: opts?.timed }),
   })
 }
 
@@ -61,9 +66,30 @@ export function getRoomState(roomId: string, observer = false) {
 }
 
 export function resetRoom(roomId: string, nickname: string) {
-  return request<Room>(`${BASE}/reset`, {
+  // 保留兼容：现在 reset 走 request 流程（双向确认）
+  return requestAction(roomId, nickname, 'request', 'reset')
+}
+
+// 悔棋 / 求和 / 再来一局：发起、同意、拒绝、取消
+export type RequestAction = 'request' | 'accept' | 'decline' | 'cancel'
+
+export function requestAction(
+  roomId: string,
+  nickname: string,
+  action: RequestAction,
+  type?: RequestType,
+) {
+  return request<Room>(`${BASE}/request`, {
     method: 'POST',
-    body: JSON.stringify({ roomId, nickname }),
+    body: JSON.stringify({ roomId, nickname, action, type }),
+  })
+}
+
+// 认输
+export function resign(roomId: string, nickname: string) {
+  return request<Room>(`${BASE}/action`, {
+    method: 'POST',
+    body: JSON.stringify({ roomId, nickname, action: 'resign' }),
   })
 }
 
