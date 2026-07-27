@@ -10,10 +10,12 @@ interface Props {
 export default function UserCenter({ nickname, onBack }: Props) {
   const [stats, setStats] = useState<LeaderboardEntry | null>(null)
   const [isLoggedIn, setIsLoggedIn] = useState(false)
+  const [avatar, setAvatar] = useState<string>('')
 
   useEffect(() => {
     const userInfo = loadUserInfo()
     setIsLoggedIn(!!userInfo?.socialUid)
+    setAvatar(userInfo?.avatar || '')
     getLeaderboard().then((res) => {
       if (res.ok && res.data) {
         // 用 socialUid 查找（仅登录用户有战绩记录）
@@ -40,10 +42,17 @@ export default function UserCenter({ nickname, onBack }: Props) {
       <div className="max-w-md mx-auto px-4 py-6">
         {/* Avatar card */}
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 text-center mb-4">
-          <div className="w-16 h-16 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center mx-auto mb-3 shadow-lg shadow-indigo-800/20">
-            <span className="text-2xl font-bold text-white">{nickname.charAt(0).toUpperCase()}</span>
+          <div className="w-16 h-16 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center mx-auto mb-3 shadow-lg shadow-indigo-800/20 overflow-hidden">
+            {avatar ? (
+              <img src={avatar} alt="" className="w-full h-full object-cover" />
+            ) : (
+              <span className="text-2xl font-bold text-white">{nickname.charAt(0).toUpperCase()}</span>
+            )}
           </div>
           <h2 className="text-lg font-bold text-gray-800">{nickname}</h2>
+          {!isLoggedIn && (
+            <span className="inline-block mt-1 text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-400 border border-gray-200">游客</span>
+          )}
         </div>
 
         {/* Stats card */}
