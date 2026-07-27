@@ -9,7 +9,7 @@ interface ChatBody {
 
 const EMOJIS = ["👍", "😄", "😤", "😂", "😅", "🙄", "👏", "💪", "🤝", "🎉", "😭", "😈"];
 
-export async function onRequest(context: { request: Request }) {
+export default async function onRequest(context: { request: Request }) {
   try {
     const roomId = context.request.method === "GET"
       ? new URL(context.request.url).searchParams.get("roomId") || ""

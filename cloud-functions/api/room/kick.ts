@@ -9,7 +9,7 @@ interface KickBody {
  * 房主解散房间：仅 waiting 阶段，仅黑方（房主）可操作。
  * 等待中的房间尚未开始对局，直接删除即可。
  */
-export async function onRequest(context: { request: Request }) {
+export default async function onRequest(context: { request: Request }) {
   try {
     if (context.request.method !== "POST") {
       return new Response(JSON.stringify({ ok: false, error: "Method not allowed" }), { status: 405 });

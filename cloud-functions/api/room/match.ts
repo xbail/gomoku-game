@@ -16,7 +16,7 @@ const WAITING_TTL_MS = 3 * 60 * 1000;
  * 快速匹配：优先加入一个无密码的等待中房间；
  * 若没有合适的房间则自动创建一个公开房间。
  */
-export async function onRequest(context: { request: Request }) {
+export default async function onRequest(context: { request: Request }) {
   try {
     if (context.request.method !== "POST") {
       return new Response(JSON.stringify({ ok: false, error: "Method not allowed" }), { status: 405 });

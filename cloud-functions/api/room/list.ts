@@ -26,7 +26,7 @@ const WAITING_TTL_MS = 3 * 60 * 1000; // 等待中：3 分钟无活动清理
 const PLAYING_TTL_MS = 60 * 1000; // 对战中：60 秒无活动清理（双方都不在线）
 const FINISHED_TTL_MS = 30 * 1000; // 已结束：30 秒后清理
 
-export async function onRequest() {
+export default async function onRequest() {
   try {
     const result = await store.list();
     const waiting: WaitingRoom[] = [];

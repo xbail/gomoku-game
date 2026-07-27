@@ -6,7 +6,7 @@ function getEnv(env?: Record<string, string>): { appid: string; appkey: string }
   return { appid, appkey };
 }
 
-export async function onRequest(context: { request: Request; env?: Record<string, string> }) {
+export default async function onRequest(context: { request: Request; env?: Record<string, string> }) {
   try {
     if (context.request.method !== "GET") {
       return new Response(JSON.stringify({ ok: false, error: "Method not allowed" }), { status: 405 });

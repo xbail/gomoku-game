@@ -25,7 +25,7 @@ async function updateLeaderboard(room: Record<string, unknown>, winner: string |
   await store.set(LEADERBOARD_KEY, JSON.stringify(board));
 }
 
-export async function onRequest(context: { request: Request }) {
+export default async function onRequest(context: { request: Request }) {
   try {
     if (context.request.method !== "GET") {
       return new Response(JSON.stringify({ ok: false, error: "Method not allowed" }), { status: 405 });

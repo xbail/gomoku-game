@@ -6,7 +6,7 @@ interface LeaveBody {
 }
 
 // 玩家主动离开：标记 lastActiveAt，若对局未结束则直接清理房间
-export async function onRequest(context: { request: Request }) {
+export default async function onRequest(context: { request: Request }) {
   try {
     if (context.request.method !== "POST") {
       return new Response(JSON.stringify({ ok: false, error: "Method not allowed" }), { status: 405 });

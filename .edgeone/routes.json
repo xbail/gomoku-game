@@ -1,0 +1,27 @@
+{
+  "version": 3,
+  "routes": [
+    {
+      "handle": "filesystem"
+    }
+  ],
+  "conf": {
+    "headers": [],
+    "redirects": [],
+    "caches": [],
+    "node-functions": {
+      "external_node_modules": [
+        "@edgeone/pages-blob"
+      ]
+    },
+    "cloudFunctions": {
+      "nodejs": {
+        "externalNodeModules": [
+          "@edgeone/pages-blob"
+        ]
+      }
+    },
+    "buildCommand": "npm run build",
+    "outputDirectory": "dist"
+  }
+}

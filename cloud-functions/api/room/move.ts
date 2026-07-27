@@ -40,7 +40,7 @@ interface MoveBody {
   col: number;
 }
 
-export async function onRequest(context: { request: Request }) {
+export default async function onRequest(context: { request: Request }) {
   try {
     if (context.request.method !== "POST") {
       return new Response(JSON.stringify({ ok: false, error: "Method not allowed" }), { status: 405 });
