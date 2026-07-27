@@ -20,8 +20,8 @@ export default function Leaderboard({ onBack }: Props) {
   useEffect(() => { fetchData() }, [])
 
   const list = Object.entries(data)
-    .map(([key, v]) => ({ key, ...v, total: v.wins + v.losses + v.draws }))
-    .sort((a, b) => b.wins - a.wins || a.losses - b.losses)
+    .map(([key, v]) => ({ key, ...v, total: v.wins + v.losses + v.draws, score: v.wins * 3 + v.draws }))
+    .sort((a, b) => b.score - a.score || b.wins - a.wins || a.losses - b.losses)
 
   return (
     <div className="min-h-screen min-h-dvh bg-gray-50 animate-slide-up">
@@ -63,10 +63,10 @@ export default function Leaderboard({ onBack }: Props) {
                 </div>
               </div>
 
-              {/* Win badge */}
+              {/* Score badge */}
               <div className="text-right">
-                <div className="text-lg font-bold text-indigo-600">{item.wins}</div>
-                <div className="text-[10px] text-gray-400">胜场</div>
+                <div className="text-lg font-bold text-indigo-600">{item.score}</div>
+                <div className="text-[10px] text-gray-400">积分</div>
               </div>
             </div>
           ))}

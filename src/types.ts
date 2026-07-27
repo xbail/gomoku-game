@@ -23,6 +23,7 @@ export interface MoveRecord {
 
 export interface Player {
   nickname: string
+  socialUid?: string
 }
 
 // 计时配置（毫秒）

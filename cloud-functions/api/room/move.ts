@@ -1,37 +1,6 @@
-import { getRoomStrong, saveRoom, store } from "./_utils";
+import { getRoomStrong, saveRoom, updateLeaderboard } from "./_utils";
 import { findWinLine, isBoardFull, checkForbidden } from "./_game";
 import { settleUsedTime, checkTimeout } from "./_timer";
-
-const LEADERBOARD_KEY = "_leaderboard";
-
-async function updateLeaderboard(room: Record<string, unknown>, winner: string | null) {
-  // 强一致读：避免并发结算时读到陈旧的排行榜，后写覆盖先写导致战绩条目丢失
-  const raw = await store.get(LEADERBOARD_KEY, { consistency: "strong" });
-  const board: Record<string, { nickname: string; wins: number; losses: number; draws: number }> = raw ? JSON.parse(raw) : {};
-
-  const players = [
-    { key: (room.players as any)?.black?.nickname, nickname: (room.players as any)?.black?.nickname },
-    { key: (room.players as any)?.white?.nickname, nickname: (room.players as any)?.white?.nickname },
-  ];
-
-  for (const p of players) {
-    if (!p.key) continue;
-    if (!board[p.key]) board[p.key] = { nickname: p.nickname || p.key, wins: 0, losses: 0, draws: 0 };
-  }
-
-  if (winner === "draw") {
-    for (const p of players) {
-      if (p.key) board[p.key].draws += 1;
-    }
-  } else if (winner) {
-    const winnerKey = winner === "black" ? players[0].key : players[1].key;
-    const loserKey = winner === "black" ? players[1].key : players[0].key;
-    if (winnerKey) board[winnerKey].wins += 1;
-    if (loserKey) board[loserKey].losses += 1;
-  }
-
-  await store.set(LEADERBOARD_KEY, JSON.stringify(board));
-}
 
 interface MoveBody {
   roomId: string;

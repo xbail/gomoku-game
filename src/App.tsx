@@ -5,7 +5,7 @@ import Home from './pages/Home'
 import Room from './pages/Room'
 import Leaderboard from './pages/Leaderboard'
 import UserCenter from './pages/UserCenter'
-import { loadUserInfo, clearUserInfo } from './api'
+import { loadUserInfo, clearUserInfo, loadGuestInfo, clearGuestInfo } from './api'
 import type { Room as RoomType } from './types'
 
 type Page = 'home' | 'leaderboard' | 'user'
@@ -23,6 +23,10 @@ export default function App() {
     if (user) {
       setNickname(user.nickname)
       setAvatar(user.avatar || '')
+    } else {
+      // 未登录则尝试恢复游客会话
+      const guest = loadGuestInfo()
+      if (guest) setNickname(guest.nickname)
     }
     if (window.location.pathname === '/callback' || window.location.search.includes('code=')) {
       setIsCallback(true)
@@ -37,6 +41,7 @@ export default function App() {
 
   const handleLogout = () => {
     clearUserInfo()
+    clearGuestInfo()
     setNickname(null)
     setRoomState(null)
     setObserveRoom(null)

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { getLeaderboard } from '../api'
+import { getLeaderboard, loadUserInfo } from '../api'
 import type { LeaderboardEntry } from '../types'
 
 interface Props {
@@ -9,12 +9,18 @@ interface Props {
 
 export default function UserCenter({ nickname, onBack }: Props) {
   const [stats, setStats] = useState<LeaderboardEntry | null>(null)
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
 
   useEffect(() => {
+    const userInfo = loadUserInfo()
+    setIsLoggedIn(!!userInfo?.socialUid)
     getLeaderboard().then((res) => {
       if (res.ok && res.data) {
-        const entry = Object.values(res.data).find((v) => v.nickname === nickname)
-        if (entry) setStats(entry)
+        // 用 socialUid 查找（仅登录用户有战绩记录）
+        if (userInfo?.socialUid) {
+          const entry = res.data[userInfo.socialUid]
+          if (entry) setStats(entry)
+        }
       }
     })
   }, [nickname])
@@ -44,7 +50,9 @@ export default function UserCenter({ nickname, onBack }: Props) {
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
           <h3 className="text-sm font-medium text-gray-500 mb-4">战绩统计</h3>
           {!stats ? (
-            <div className="text-center text-sm text-gray-300 py-4">暂无对战记录</div>
+            <div className="text-center text-sm text-gray-300 py-4">
+              {isLoggedIn ? '暂无对战记录' : '游客模式不记录战绩，登录后可参与排行榜'}
+            </div>
           ) : (
             <div className="grid grid-cols-2 gap-4">
               <div className="text-center p-3 rounded-xl bg-green-50 border border-green-100">

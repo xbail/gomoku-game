@@ -4,6 +4,7 @@ interface JoinBody {
   roomId: string;
   nickname: string;
   password?: string;
+  socialUid?: string;
 }
 
 export default async function onRequest(context: { request: Request }) {
@@ -42,7 +43,14 @@ export default async function onRequest(context: { request: Request }) {
       return new Response(JSON.stringify({ ok: false, error: "昵称重复" }), { status: 400 });
     }
 
-    room.players.white = { nickname };
+    // 防刷榜：同一登录用户不能同时占黑白双方
+    const blackUid = (room.players as any)?.black?.socialUid;
+    const myUid = body.socialUid?.trim();
+    if (blackUid && myUid && blackUid === myUid) {
+      return new Response(JSON.stringify({ ok: false, error: "不能和自己对战哦" }), { status: 400 });
+    }
+
+    room.players.white = { nickname, ...(myUid ? { socialUid: myUid } : {}) };
     room.status = "playing";
     // 对局开始：初始化回合计时
     room.turnStartAt = Date.now();

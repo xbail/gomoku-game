@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { getLoginUrl } from '../api'
+import { getLoginUrl, saveGuestInfo } from '../api'
 import { LOGIN_PROVIDERS } from '../types'
 
 interface LoginProps {
@@ -28,6 +28,7 @@ export default function Login({ onLoggedIn }: LoginProps) {
 
   const handleGuestLogin = () => {
     if (!guestName.trim()) return
+    saveGuestInfo(guestName.trim())
     onLoggedIn(guestName.trim())
   }
 

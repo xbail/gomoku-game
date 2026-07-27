@@ -7,6 +7,7 @@ interface MatchBody {
   forbid?: boolean;
   timed?: boolean;
   boardSize?: number;
+  socialUid?: string;
 }
 
 const ALLOWED_BOARD_SIZES = [9, 13, 15];
@@ -50,12 +51,18 @@ export default async function onRequest(context: { request: Request }) {
         // 昵称冲突检查
         if (room.players?.black?.nickname === nickname) continue;
 
+        // 防刷榜：同一登录用户不能同时占黑白双方
+        const blackUid = room.players?.black?.socialUid;
+        if (blackUid && body.socialUid && blackUid === body.socialUid.trim()) continue;
+
         // 尝试加入（强一致二次校验，避免并发竞争）
         const fresh = await getRoomStrong(room.id);
         if (!fresh || fresh.status !== "waiting" || fresh.players?.white) continue;
         if (fresh.players?.black?.nickname === nickname) continue;
+        // 防刷榜二次校验
+        if (fresh.players?.black?.socialUid && body.socialUid && fresh.players.black.socialUid === body.socialUid.trim()) continue;
 
-        fresh.players.white = { nickname };
+        fresh.players.white = { nickname, ...(body.socialUid?.trim() ? { socialUid: body.socialUid.trim() } : {}) };
         fresh.status = "playing";
         fresh.turnStartAt = now;
         fresh.blackUsedMs = 0;
@@ -70,10 +77,11 @@ export default async function onRequest(context: { request: Request }) {
     }
 
     // 2. 没有合适的房间，创建一个新的公开房间
-    const forbid = body.forbid !== false;
-    const timed = body.timed !== false;
+    const forbid = body.forbid === true;
+    const timed = body.timed === true;
     const timer = timed ? { ...DEFAULT_TIMER } : { ...NO_TIMER };
     const boardSize = ALLOWED_BOARD_SIZES.includes(body.boardSize as number) ? body.boardSize! : 15;
+    const socialUid = body.socialUid?.trim() || undefined;
 
     const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
     let roomId = "";
@@ -84,7 +92,7 @@ export default async function onRequest(context: { request: Request }) {
 
     const room = {
       id: roomId,
-      players: { black: { nickname }, white: null },
+      players: { black: { nickname, ...(socialUid ? { socialUid } : {}) }, white: null },
       board: createEmptyBoard(boardSize),
       boardSize,
       currentTurn: "black",

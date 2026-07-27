@@ -2,6 +2,33 @@ import type { ApiResponse, Room, RoomList, LoginUrlResult, UserInfo, ChatMessage
 
 const BASE = '/api/room'
 
+// 游客信息持久化（刷新不丢失）
+const GUEST_KEY = 'gomoku_guest'
+
+export function saveGuestInfo(nickname: string) {
+  localStorage.setItem(GUEST_KEY, JSON.stringify({ nickname, isGuest: true }))
+}
+
+export function loadGuestInfo(): { nickname: string; isGuest: true } | null {
+  try {
+    const raw = localStorage.getItem(GUEST_KEY)
+    return raw ? JSON.parse(raw) : null
+  } catch { return null }
+}
+
+export function clearGuestInfo() {
+  localStorage.removeItem(GUEST_KEY)
+}
+
+// 获取当前用户信息（登录用户优先，否则尝试游客）
+export function getCurrentUser(): { nickname: string; socialUid?: string; avatar?: string } | null {
+  const user = loadUserInfo()
+  if (user) return user
+  const guest = loadGuestInfo()
+  if (guest) return guest
+  return null
+}
+
 async function request<T>(url: string, options?: RequestInit): Promise<ApiResponse<T>> {
   try {
     const res = await fetch(url, {
@@ -35,10 +62,11 @@ export function removeMyRoom(roomId: string) {
 }
 
 export interface CreateRoomOptions {
-  forbid?: boolean       // 默认 true
-  timed?: boolean        // 默认 true
+  forbid?: boolean       // 默认 false
+  timed?: boolean        // 默认 false
   boardSize?: number     // 9 / 13 / 15，默认 15
   password?: string      // 私密房密码，留空为公开房
+  socialUid?: string     // 登录用户唯一标识
 }
 
 export function createRoom(nickname: string, opts?: CreateRoomOptions) {
@@ -50,14 +78,15 @@ export function createRoom(nickname: string, opts?: CreateRoomOptions) {
       timed: opts?.timed,
       boardSize: opts?.boardSize,
       password: opts?.password,
+      socialUid: opts?.socialUid,
     }),
   })
 }
 
-export function joinRoom(roomId: string, nickname: string, password?: string) {
+export function joinRoom(roomId: string, nickname: string, password?: string, socialUid?: string) {
   return request<Room>(`${BASE}/join`, {
     method: 'POST',
-    body: JSON.stringify({ roomId, nickname, password }),
+    body: JSON.stringify({ roomId, nickname, password, socialUid }),
   })
 }
 
@@ -70,6 +99,7 @@ export function matchRoom(nickname: string, opts?: CreateRoomOptions) {
       forbid: opts?.forbid,
       timed: opts?.timed,
       boardSize: opts?.boardSize,
+      socialUid: opts?.socialUid,
     }),
   })
 }

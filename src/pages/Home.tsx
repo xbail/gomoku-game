@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { createRoom, joinRoom, listRooms, rejoinRoom, getMyRooms, removeMyRoom, observeRoom, matchRoom } from '../api'
+import { createRoom, joinRoom, listRooms, rejoinRoom, getMyRooms, removeMyRoom, observeRoom, matchRoom, loadUserInfo } from '../api'
 import type { Room, WaitingRoomInfo, PlayingRoomInfo } from '../types'
 
 interface HomeProps {
@@ -24,8 +24,8 @@ export default function Home({ nickname: initialNickname, avatar, onLogout, onLe
   // 创建房间配置
   const [showConfig, setShowConfig] = useState(false)
   const [boardSize, setBoardSize] = useState(15)
-  const [forbid, setForbid] = useState(true)
-  const [timed, setTimed] = useState(true)
+  const [forbid, setForbid] = useState(false)
+  const [timed, setTimed] = useState(false)
   const [password, setPassword] = useState('')
 
   // 密码加入弹窗
@@ -68,6 +68,8 @@ export default function Home({ nickname: initialNickname, avatar, onLogout, onLe
     return () => clearInterval(t)
   }, [fetchRooms, refreshMyRooms])
 
+  const socialUid = loadUserInfo()?.socialUid
+
   const handleCreate = async () => {
     if (!nickname.trim()) { setError('请输入昵称'); return }
     setLoading(true); setError('')
@@ -76,6 +78,7 @@ export default function Home({ nickname: initialNickname, avatar, onLogout, onLe
       forbid,
       timed,
       password: password.trim() || undefined,
+      socialUid,
     })
     setLoading(false)
     if (res.ok && res.data) {
@@ -92,6 +95,7 @@ export default function Home({ nickname: initialNickname, avatar, onLogout, onLe
       boardSize,
       forbid,
       timed,
+      socialUid,
     })
     setLoading(false)
     if (res.ok && res.data) {
@@ -113,7 +117,7 @@ export default function Home({ nickname: initialNickname, avatar, onLogout, onLe
     }
 
     setLoading(true); setError('')
-    const res = await joinRoom(roomId, nickname.trim())
+    const res = await joinRoom(roomId, nickname.trim(), undefined, socialUid)
     setLoading(false)
     if (res.ok && res.data) {
       onEnter(res.data, nickname.trim())
@@ -125,7 +129,7 @@ export default function Home({ nickname: initialNickname, avatar, onLogout, onLe
   const handleJoinWithPassword = async () => {
     if (!nickname.trim()) { setError('请输入昵称'); return }
     setLoading(true); setError('')
-    const res = await joinRoom(pendingRoomId, nickname.trim(), joinPwd.trim())
+    const res = await joinRoom(pendingRoomId, nickname.trim(), joinPwd.trim(), socialUid)
     setLoading(false)
     if (res.ok && res.data) {
       setShowPwdPrompt(false)
@@ -165,7 +169,7 @@ export default function Home({ nickname: initialNickname, avatar, onLogout, onLe
     if (!nickname.trim()) { setError('请输入昵称'); return }
     if (!roomId.trim()) { setError('请输入房间ID'); return }
     setLoading(true); setError('')
-    const res = await joinRoom(roomId.trim().toUpperCase(), nickname.trim())
+    const res = await joinRoom(roomId.trim().toUpperCase(), nickname.trim(), undefined, socialUid)
     setLoading(false)
     if (res.ok && res.data) {
       onEnter(res.data, nickname.trim())
