@@ -30,7 +30,8 @@ export async function onRequest() {
     const now = Date.now();
 
     for (const blob of result.blobs) {
-      const data = await store.get(blob.key);
+      // 强一致读：保证首页展示的房间状态是最新的，避免“已有人加入却仍显示等待中”
+      const data = await store.get(blob.key, { consistency: "strong" });
       if (!data) continue;
       try {
         const room = JSON.parse(data);

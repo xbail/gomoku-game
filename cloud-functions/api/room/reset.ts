@@ -1,4 +1,4 @@
-import { getRoom, saveRoom } from "./_utils";
+import { getRoomStrong, saveRoom } from "./_utils";
 import { createEmptyBoard } from "./_game";
 
 interface ResetBody {
@@ -17,7 +17,8 @@ export async function onRequest(context: { request: Request }) {
       return new Response(JSON.stringify({ ok: false, error: "参数不完整" }), { status: 400 });
     }
 
-    const room = await getRoom(body.roomId.trim().toUpperCase());
+    // 强一致读：基于最新的房间数据判定权限与状态，避免陈旧读取导致误重置
+    const room = await getRoomStrong(body.roomId.trim().toUpperCase());
     if (!room) {
       return new Response(JSON.stringify({ ok: false, error: "房间不存在" }), { status: 404 });
     }

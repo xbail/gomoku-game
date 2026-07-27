@@ -4,7 +4,8 @@ const LEADERBOARD_KEY = "_leaderboard";
 
 export async function onRequest() {
   try {
-    const raw = await store.get(LEADERBOARD_KEY);
+    // 强一致读：返回最新的排行榜数据，避免展示陈旧/缺失的条目
+    const raw = await store.get(LEADERBOARD_KEY, { consistency: "strong" });
     const data = raw ? JSON.parse(raw) : [];
     return new Response(JSON.stringify({ ok: true, data }), { status: 200 });
   } catch (e) {

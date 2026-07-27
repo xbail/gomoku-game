@@ -4,7 +4,9 @@ import { checkWin, isBoardFull } from "./_game";
 const LEADERBOARD_KEY = "_leaderboard";
 
 async function updateLeaderboard(room: Record<string, unknown>, winner: string | null) {
-  const raw = await store.get(LEADERBOARD_KEY);
+  // 强一致读：避免并发结算时读到陈旧的排行榜，后写覆盖先写导致战绩条目丢失
+  // （即排行榜看起来“只剩个别人”的 Bug）
+  const raw = await store.get(LEADERBOARD_KEY, { consistency: "strong" });
   const board: Record<string, { nickname: string; wins: number; losses: number; draws: number }> = raw ? JSON.parse(raw) : {};
 
   const players = [
