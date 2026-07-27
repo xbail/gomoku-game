@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { getLeaderboard, resetLeaderboard } from '../api'
+import { getLeaderboard } from '../api'
 import type { LeaderboardEntry } from '../types'
 
 interface Props {
@@ -9,7 +9,6 @@ interface Props {
 export default function Leaderboard({ onBack }: Props) {
   const [data, setData] = useState<Record<string, LeaderboardEntry>>({})
   const [loading, setLoading] = useState(true)
-  const [resetting, setResetting] = useState(false)
 
   const fetchData = async () => {
     setLoading(true)
@@ -19,18 +18,6 @@ export default function Leaderboard({ onBack }: Props) {
   }
 
   useEffect(() => { fetchData() }, [])
-
-  const handleReset = async () => {
-    if (!confirm('确认清空排行榜全部数据？此操作不可撤销。')) return
-    setResetting(true)
-    const res = await resetLeaderboard()
-    setResetting(false)
-    if (res.ok) {
-      setData({})
-    } else {
-      alert(res.error || '清空失败')
-    }
-  }
 
   const list = Object.entries(data)
     .map(([key, v]) => ({ key, ...v, total: v.wins + v.losses + v.draws, score: v.wins * 3 + v.draws }))
@@ -47,15 +34,6 @@ export default function Leaderboard({ onBack }: Props) {
         </button>
         <h1 className="text-lg font-bold text-gray-800">排行榜</h1>
         <button onClick={fetchData} className="ml-auto text-xs text-gray-400 hover:text-gray-600 transition cursor-pointer">刷新</button>
-        {list.length > 0 && (
-          <button
-            onClick={handleReset}
-            disabled={resetting}
-            className="text-xs text-red-400 hover:text-red-600 transition cursor-pointer disabled:opacity-50"
-          >
-            {resetting ? '清空中...' : '清空'}
-          </button>
-        )}
       </div>
 
       {loading ? (

@@ -104,11 +104,3 @@ export async function updateLeaderboard(room: Record<string, unknown>, winner: s
 
   await store.set(LEADERBOARD_KEY, JSON.stringify(data));
 }
-
-/**
- * 重置排行榜（清空全部数据）。
- */
-export async function resetLeaderboard() {
-  const data: LeaderboardData = { version: LEADERBOARD_VERSION, entries: {} };
-  await store.set(LEADERBOARD_KEY, JSON.stringify(data));
-}
