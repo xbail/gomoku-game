@@ -217,3 +217,8 @@ export function leaveRoom(roomId: string, nickname: string) {
 export function getLeaderboard() {
   return request<Record<string, LeaderboardEntry>>('/api/leaderboard')
 }
+
+// 重置排行榜（清空全部数据）
+export function resetLeaderboard() {
+  return request<Record<string, LeaderboardEntry>>('/api/leaderboard?reset=1')
+}

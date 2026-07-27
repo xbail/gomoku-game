@@ -35,14 +35,53 @@ export async function deleteRoom(roomId: string) {
 }
 
 const LEADERBOARD_KEY = "_leaderboard";
+const LEADERBOARD_VERSION = 2;
+
+interface LeaderboardData {
+  version: number;
+  entries: Record<string, { nickname: string; wins: number; losses: number; draws: number }>;
+}
+
+/**
+ * 读取排行榜（带版本校验）。
+ * 旧格式数据（无 version 字段或版本不匹配）会被自动丢弃并重置为空。
+ */
+async function readLeaderboard(): Promise<LeaderboardData> {
+  const raw = await store.get(LEADERBOARD_KEY, { consistency: "strong" });
+  if (!raw) return { version: LEADERBOARD_VERSION, entries: {} };
+  try {
+    const parsed = JSON.parse(raw);
+    // 版本不匹配（旧数据）→ 自动清空
+    if (!parsed.version || parsed.version !== LEADERBOARD_VERSION) {
+      return { version: LEADERBOARD_VERSION, entries: {} };
+    }
+    // 校验并过滤无效条目
+    const entries: LeaderboardData["entries"] = {};
+    if (parsed.entries && typeof parsed.entries === "object") {
+      for (const [key, val] of Object.entries(parsed.entries)) {
+        const v = val as Record<string, unknown>;
+        if (key && typeof key === "string"
+          && typeof v?.nickname === "string"
+          && typeof v?.wins === "number"
+          && typeof v?.losses === "number"
+          && typeof v?.draws === "number") {
+          entries[key] = { nickname: v.nickname, wins: v.wins, losses: v.losses, draws: v.draws };
+        }
+      }
+    }
+    return { version: LEADERBOARD_VERSION, entries };
+  } catch {
+    return { version: LEADERBOARD_VERSION, entries: {} };
+  }
+}
 
 /**
  * 更新排行榜：仅记录有 socialUid 的登录用户，以 socialUid 为唯一键。
  * 游客（无 socialUid）不记入排行榜，防止刷榜。
  */
 export async function updateLeaderboard(room: Record<string, unknown>, winner: string | null) {
-  const raw = await store.get(LEADERBOARD_KEY, { consistency: "strong" });
-  const board: Record<string, { nickname: string; wins: number; losses: number; draws: number }> = raw ? JSON.parse(raw) : {};
+  const data = await readLeaderboard();
+  const board = data.entries;
 
   const players = [
     { key: (room.players as any)?.black?.socialUid, nickname: (room.players as any)?.black?.nickname },
@@ -63,5 +102,13 @@ export async function updateLeaderboard(room: Record<string, unknown>, winner: s
     if (loserKey) board[loserKey].losses += 1;
   }
 
-  await store.set(LEADERBOARD_KEY, JSON.stringify(board));
+  await store.set(LEADERBOARD_KEY, JSON.stringify(data));
+}
+
+/**
+ * 重置排行榜（清空全部数据）。
+ */
+export async function resetLeaderboard() {
+  const data: LeaderboardData = { version: LEADERBOARD_VERSION, entries: {} };
+  await store.set(LEADERBOARD_KEY, JSON.stringify(data));
 }
