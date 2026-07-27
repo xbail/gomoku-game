@@ -321,6 +321,25 @@ EdgeOne Blob Storage 的 `get(key)` 默认是**最终一致**读取，`get(key, 
 
 **修复**：`_timer.ts` 的 `DEFAULT_TIMER` 改为每步 2 分钟（`perMoveMs: 120_000`）、总时长不限（`totalMs: 0`），仅单步超时判负，节奏更宽松。
 
+## v4 修复：API 路由全部返回 HTML
+
+### 问题
+
+部署后前端正常加载，但所有 API 请求返回 `<!doctype html>`（SPA 的 `index.html`），前端报错 `Unexpected token '<', " <!doctype "... is not valid JSON`。
+
+### 根因
+
+两个问题叠加：
+
+1. **云函数 `onRequest` 未用 `export default`**：EdgeOne Pages Cloud Functions 的 catch-all handler（`onRequest`）必须通过 `export default` 导出，命名导出（`export function onRequest`）不会被平台识别为路由入口。官方文档的所有 `onRequest` 示例均为 `export default function onRequest`。导致 17 个云函数文件全部未被注册为路由，API 请求回退到静态资源。
+
+2. **误提交 `.edgeone/routes.json`**：该文件由 `edgeone pages generate-routes` 命令本地生成，仅含 `{"handle": "filesystem"}`（纯静态路由）。若存在于仓库中，平台构建时可能以此覆盖自动检测的 Cloud Functions 路由，导致所有 `/api/*` 请求被当作静态资源处理。
+
+### 修复
+
+- 所有 17 个云函数文件统一改为 `export default async function onRequest`。
+- 从仓库中删除 `.edgeone/routes.json`，并将 `.edgeone` 加入 `.gitignore`。
+
 ## 对局规则（v2 新增）
 
 本版本将对局从"自由五子棋"升级为接近竞技连珠的正规规则：
