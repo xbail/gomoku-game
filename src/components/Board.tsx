@@ -116,6 +116,32 @@ export default function Board({ board, currentTurn, myColor, winner, onCellClick
             ))}
           </svg>
 
+          {/* 获胜连线：用 SVG 画一条贯穿五子的发光线 */}
+          {winLine && winLine.length >= 2 && (
+            <svg className="absolute inset-0 w-full h-full z-20 pointer-events-none" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <filter id="winGlow" x="-50%" y="-50%" width="200%" height="200%">
+                  <feGaussianBlur stdDeviation="3" result="blur" />
+                  <feMerge>
+                    <feMergeNode in="blur" />
+                    <feMergeNode in="SourceGraphic" />
+                  </feMerge>
+                </filter>
+              </defs>
+              <line
+                x1={intersectionPct(winLine[0][1])}
+                y1={intersectionPct(winLine[0][0])}
+                x2={intersectionPct(winLine[winLine.length - 1][1])}
+                y2={intersectionPct(winLine[winLine.length - 1][0])}
+                stroke="#fbbf24"
+                strokeWidth="5"
+                strokeLinecap="round"
+                filter="url(#winGlow)"
+                className="animate-win-line"
+              />
+            </svg>
+          )}
+
           {board.map((row, ri) =>
             row.map((cell, ci) => {
               const isLast = lastMove?.[0] === ri && lastMove?.[1] === ci
@@ -159,7 +185,7 @@ export default function Board({ board, currentTurn, myColor, winner, onCellClick
 
                     {/* Stone */}
                     {cell && (
-                      <div className={`absolute rounded-full ${cell === 'black' ? 'stone-black' : 'stone-white'} ${isWinCell ? 'ring-2 ring-amber-400 ring-offset-1 ring-offset-amber-300/40 shadow-lg shadow-amber-400/50' : ''}`}
+                      <div className={`absolute rounded-full ${cell === 'black' ? 'stone-black' : 'stone-white'} ${isWinCell ? 'ring-4 ring-amber-400 shadow-lg shadow-amber-400/60 animate-win-pulse' : ''}`}
                         style={{ width: '82%', height: '82%' }}
                       >
                         {isLast && (

@@ -49,3 +49,23 @@ body {
 .animate-last-pulse {
   animation: last-pulse 1.4s ease-in-out infinite;
 }
+
+/* ── Win line animation ── */
+@keyframes win-line {
+  0% { stroke-dashoffset: 100; opacity: 0; }
+  30% { opacity: 1; }
+  100% { stroke-dashoffset: 0; opacity: 1; }
+}
+.animate-win-line {
+  stroke-dasharray: 100;
+  animation: win-line 0.6s ease-out forwards;
+}
+
+/* ── Win stone pulse ── */
+@keyframes win-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+}
+.animate-win-pulse {
+  animation: win-pulse 1.2s ease-in-out infinite;
+}
