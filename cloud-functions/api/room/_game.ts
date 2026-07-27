@@ -1,5 +1,5 @@
-type CellState = "black" | "white" | null;
-type PlayerColor = "black" | "white";
+export type CellState = "black" | "white" | null;
+export type PlayerColor = "black" | "white";
 
 export function createEmptyBoard(size = 15): CellState[][] {
   return Array.from({ length: size }, () => Array(size).fill(null));

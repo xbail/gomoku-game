@@ -1,8 +1,10 @@
 const BASE = "https://open.juhedenglu.cn/connect.php";
 
 function getEnv(env?: Record<string, string>): { appid: string; appkey: string } {
-  const appid = env?.JHDL_APPID || (typeof process !== "undefined" ? (process as any).env?.JHDL_APPID : "") || "";
-  const appkey = env?.JHDL_APPKEY || (typeof process !== "undefined" ? (process as any).env?.JHDL_APPKEY : "") || "";
+  const g = globalThis as Record<string, unknown>;
+  const proc = g.process as { env?: Record<string, string> } | undefined;
+  const appid = env?.JHDL_APPID || proc?.env?.JHDL_APPID || "";
+  const appkey = env?.JHDL_APPKEY || proc?.env?.JHDL_APPKEY || "";
   return { appid, appkey };
 }
 
