@@ -62,6 +62,6 @@ export async function onRequest(context: { request: Request }) {
 
     return new Response(JSON.stringify({ ok: false, error: "Method not allowed" }), { status: 405 });
   } catch (e) {
-    return new Response(JSON.stringify({ ok: false, error: String(e) }), { status: 500 });
+    return new Response(JSON.stringify({ ok: false, error: e instanceof Error ? e.message : String(e) }), { status: 500 });
   }
 }

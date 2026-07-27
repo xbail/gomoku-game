@@ -70,7 +70,9 @@ export default function Board({ board, currentTurn, myColor, winner, onCellClick
   }, [N, GAPS])
 
   const boardPx = 'min(94vw, 72vh, 720px)'
-  const intersectionPct = (i: number) => `${(i / GAPS) * 100}%`
+  // 交叉点不贴边：从半格处开始到 100%-半格处结束，避免边缘棋子被 overflow-hidden 裁切
+  const halfCellPct = 50 / GAPS
+  const intersectionPct = (i: number) => `${halfCellPct + (i / GAPS) * (100 - 2 * halfCellPct)}%`
   const hitPct = `${100 / GAPS}%`
 
   return (
@@ -105,8 +107,8 @@ export default function Board({ board, currentTurn, myColor, winner, onCellClick
           <svg className="absolute inset-0 w-full h-full" xmlns="http://www.w3.org/2000/svg">
             {Array.from({ length: N }).map((_, i) => (
               <g key={i}>
-                <line x1={intersectionPct(i)} y1="0%" x2={intersectionPct(i)} y2="100%" stroke="rgba(101,67,33,0.55)" strokeWidth="0.8" />
-                <line x1="0%" y1={intersectionPct(i)} x2="100%" y2={intersectionPct(i)} stroke="rgba(101,67,33,0.55)" strokeWidth="0.8" />
+                <line x1={intersectionPct(i)} y1={intersectionPct(0)} x2={intersectionPct(i)} y2={intersectionPct(GAPS)} stroke="rgba(101,67,33,0.55)" strokeWidth="0.8" />
+                <line x1={intersectionPct(0)} y1={intersectionPct(i)} x2={intersectionPct(GAPS)} y2={intersectionPct(i)} stroke="rgba(101,67,33,0.55)" strokeWidth="0.8" />
               </g>
             ))}
             {starPoints.map(([r, c]) => (

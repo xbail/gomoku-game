@@ -55,6 +55,6 @@ export async function onRequest(context: { request: Request }) {
     const { password: _omit, ...safeRoom } = room;
     return new Response(JSON.stringify({ ok: true, data: safeRoom }), { status: 200 });
   } catch (e) {
-    return new Response(JSON.stringify({ ok: false, error: String(e) }), { status: 500 });
+    return new Response(JSON.stringify({ ok: false, error: e instanceof Error ? e.message : String(e) }), { status: 500 });
   }
 }

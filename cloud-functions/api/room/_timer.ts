@@ -1,7 +1,8 @@
 import type { PlayerColor } from "./_game";
 
-// 默认计时配置：每步 30s，总时长 10 分钟
-export const DEFAULT_TIMER = { perMoveMs: 30_000, totalMs: 10 * 60_000 } as const;
+// 默认计时配置：每步 2 分钟，总时长不限（0 = 不限）
+// 娱乐模式：给足思考时间，不因总时长判负
+export const DEFAULT_TIMER = { perMoveMs: 120_000, totalMs: 0 } as const;
 export const NO_TIMER = { perMoveMs: 0, totalMs: 0 } as const;
 
 /**
