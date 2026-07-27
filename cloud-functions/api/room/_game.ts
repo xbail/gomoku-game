@@ -1,10 +1,8 @@
 type CellState = "black" | "white" | null;
 type PlayerColor = "black" | "white";
 
-const BOARD_SIZE = 15;
-
-export function createEmptyBoard(): CellState[][] {
-  return Array.from({ length: BOARD_SIZE }, () => Array(BOARD_SIZE).fill(null));
+export function createEmptyBoard(size = 15): CellState[][] {
+  return Array.from({ length: size }, () => Array(size).fill(null));
 }
 
 // 4 个方向：横、竖、主对角、副对角
@@ -21,13 +19,14 @@ const DIRECTIONS = [
  */
 function getLine(board: CellState[][], row: number, col: number, dir: readonly [number, number]): [number, number][] {
   const cell = board[row][col];
+  const size = board.length;
   const line: [number, number][] = [[row, col]];
 
   // 正向
   for (let i = 1; i < 6; i++) {
     const r = row + dir[0] * i;
     const c = col + dir[1] * i;
-    if (r < 0 || r >= BOARD_SIZE || c < 0 || c >= BOARD_SIZE) break;
+    if (r < 0 || r >= size || c < 0 || c >= size) break;
     if (board[r][c] !== cell) break;
     line.push([r, c]);
   }
@@ -35,7 +34,7 @@ function getLine(board: CellState[][], row: number, col: number, dir: readonly [
   for (let i = 1; i < 6; i++) {
     const r = row - dir[0] * i;
     const c = col - dir[1] * i;
-    if (r < 0 || r >= BOARD_SIZE || c < 0 || c >= BOARD_SIZE) break;
+    if (r < 0 || r >= size || c < 0 || c >= size) break;
     if (board[r][c] !== cell) break;
     line.unshift([r, c]);
   }
@@ -84,6 +83,7 @@ export function isBoardFull(board: CellState[][]): boolean {
 function countFour(board: CellState[][], row: number, col: number, dir: readonly [number, number]): number {
   const cell = board[row][col];
   if (!cell) return 0;
+  const size = board.length;
 
   // 在该方向上扫描包含 (row,col) 的所有 6 格窗口（中心 1 + 两侧 5），
   // 统计恰好 4 连且两端不全堵的形态数（去重近似）。
@@ -94,7 +94,7 @@ function countFour(board: CellState[][], row: number, col: number, dir: readonly
   for (let i = -4; i <= 4; i++) {
     const r = row + dir[0] * i;
     const c = col + dir[1] * i;
-    if (r < 0 || r >= BOARD_SIZE || c < 0 || c >= BOARD_SIZE) {
+    if (r < 0 || r >= size || c < 0 || c >= size) {
       seg.push({ r: -1, c: -1, v: null }); // 边界视为空（非同色）
     } else {
       seg.push({ r, c, v: board[r][c] });
@@ -135,7 +135,7 @@ function countFour(board: CellState[][], row: number, col: number, dir: readonly
       // seg 索引：窗口起始 i，内部偏移 s-1
       const r = row + dir[0] * (i - 4 + s - 1);
       const c = col + dir[1] * (i - 4 + s - 1);
-      leftBlocked = r < 0 || r >= BOARD_SIZE || c < 0 || c >= BOARD_SIZE || (board[r][c] !== null && board[r][c] !== cell);
+      leftBlocked = r < 0 || r >= size || c < 0 || c >= size || (board[r][c] !== null && board[r][c] !== cell);
       void lr;
     }
     // 右端
@@ -144,7 +144,7 @@ function countFour(board: CellState[][], row: number, col: number, dir: readonly
     else {
       const r = row + dir[0] * (i - 4 + e + 1);
       const c = col + dir[1] * (i - 4 + e + 1);
-      rightBlocked = r < 0 || r >= BOARD_SIZE || c < 0 || c >= BOARD_SIZE || (board[r][c] !== null && board[r][c] !== cell);
+      rightBlocked = r < 0 || r >= size || c < 0 || c >= size || (board[r][c] !== null && board[r][c] !== cell);
     }
     // 活四或冲四都计入「四」
     fours++;
@@ -158,6 +158,7 @@ function countFour(board: CellState[][], row: number, col: number, dir: readonly
 function countOpenThree(board: CellState[][], row: number, col: number, dir: readonly [number, number]): number {
   const cell = board[row][col];
   if (!cell) return 0;
+  const size = board.length;
 
   // 活三：OOO 且两端都空（_OOO_），或带跳活三 _O_OO_ / _OO_O_。
   // 窗口取 [-4..4] 共 9 格，确保能覆盖偏移的活三。
@@ -165,7 +166,7 @@ function countOpenThree(board: CellState[][], row: number, col: number, dir: rea
   for (let i = -4; i <= 4; i++) {
     const r = row + dir[0] * i;
     const c = col + dir[1] * i;
-    if (r < 0 || r >= BOARD_SIZE || c < 0 || c >= BOARD_SIZE) {
+    if (r < 0 || r >= size || c < 0 || c >= size) {
       line.push({ v: null, idx: i });
     } else {
       line.push({ v: board[r][c], idx: i });

@@ -25,12 +25,20 @@
 
 ## 功能特性
 
-- 房间制对战：创建房间获得 6 位房间号，分享给好友加入；也可在大厅点击“等待中的房间”直接加入。
+- 房间制对战：创建房间获得 6 位房间号，分享给好友加入；也可在大厅点击"等待中的房间"直接加入。
+- 快速匹配：一键匹配，自动加入无密码的等待中房间，没有则自动创建新房间。
+- 私密房：创建房间时可设置密码，加入需输入正确密码；大厅列表仅显示"私密"标识不暴露密码。
+- 棋盘大小选择：支持 9×9 / 13×13 / 15×15 三种规格，星位根据棋盘大小动态计算。
+- 房间配置展示：大厅列表展示每个房间的禁手/计时/棋盘大小/加密标识，一目了然。
+- 房主解散：等待阶段房主可解散房间，取消等待。
 - 实时同步：房间页 500ms 轮询拉取最新棋局状态，落子有音效与最后一手高亮。
 - 胜负判定：横、竖、两条对角线任一方向连成 5 子即胜；棋盘下满判平局。
-- 观战模式：大厅“对战中”的房间可进入观战，只读不参与，不影响心跳。
+- 黑方禁手：长连、四四、三三禁手判定（可开关），白方不受限。
+- 计时模式：每步 30 秒 + 总时长 10 分钟，超时判负（可开关）。
+- 悔棋 / 求和 / 认输 / 再来一局：悔棋与求和需对手同意（双向确认），认输直接判负，再来一局也需双向确认。
+- 观战模式：大厅"对战中"的房间可进入观战，只读不参与，不影响心跳。
 - 局内聊天：支持文字与表情消息，最近 50 条。
-- 断线重进：本地方案记录“我的房间”，刷新/重进后可一键回到未结束的对局。
+- 断线重进：本地方案记录"我的房间"，刷新/重进后可一键回到未结束的对局。
 - 战绩排行榜：按胜场排序，展示胜/负/平与胜率。
 - 第三方登录：聚合登录（QQ / 微信），也支持游客模式直接输入昵称游玩。
 - 房间自动回收：等待、对战、已结束三种状态分别有 TTL，空闲自动清理。
@@ -57,27 +65,32 @@ gomoku-game/
 │       │   ├── callback.ts     # code 换取用户信息（给前端调用）
 │       │   └── return.ts        # OAuth 回调落地页，写 localStorage 后跳回首页
 │       ├── room/               # 房间与对局逻辑
-│       │   ├── _game.ts         # 棋盘创建 / 胜负判定 / 平局判定（纯函数）
+│       │   ├── _game.ts         # 棋盘创建 / 胜负判定 / 禁手判定（纯函数，支持 9/13/15 棋盘）
+│       │   ├── _timer.ts        # 计时工具：超时检测 / 结算用时 / 剩余时间计算
 │       │   ├── _utils.ts        # Blob 封装：getRoom / getRoomStrong / saveRoom / touchRoom / deleteRoom
-│       │   ├── create.ts        # 创建房间（生成 6 位房间号）
-│       │   ├── join.ts          # 加入房间（白方落座，状态 → playing）
+│       │   ├── create.ts        # 创建房间（6 位房间号 + 配置：棋盘/禁手/计时/密码）
+│       │   ├── match.ts         # 快速匹配（自动加入无密码等待房，无则创建新房）
+│       │   ├── join.ts          # 加入房间（白方落座，密码校验，状态 → playing）
+│       │   ├── kick.ts          # 房主解散房间（仅 waiting 阶段）
 │       │   ├── leave.ts         # 玩家离开，清理房间
-│       │   ├── list.ts          # 大厅房间列表（waiting / playing）
-│       │   ├── state.ts         # 拉取房间状态（玩家心跳；观战不养房间）
-│       │   ├── move.ts          # 落子 + 胜负判定 + 更新排行榜
-│       │   ├── reset.ts         # 再来一局（重置棋盘）
+│       │   ├── list.ts          # 大厅房间列表（含配置标识：密码/禁手/计时/棋盘大小）
+│       │   ├── state.ts         # 拉取房间状态（玩家心跳；观战不养房间；检查超时）
+│       │   ├── move.ts          # 落子 + 胜负判定 + 禁手判定 + 超时判定 + 更新排行榜
+│       │   ├── request.ts       # 悔棋/求和/再来一局（双向确认）
+│       │   ├── action.ts        # 认输
+│       │   ├── reset.ts         # 再来一局（重置棋盘，保留配置）
 │       │   ├── rejoin.ts        # 断线重进校验（仅本局玩家）
 │       │   └── chat.ts         # 局内聊天收发（GET 取 / POST 发）
 │       └── leaderboard.ts       # 排行榜读取
 ├── src/                        # 前端源码
 │   ├── components/
-│   │   ├── Board.tsx            # 15×15 棋盘，落子确认、最后一手高亮、坐标
+│   │   ├── Board.tsx            # 棋盘组件（动态 9/13/15，落子确认、最后一手高亮、坐标）
 │   │   └── ChatPanel.tsx        # 聊天面板
 │   ├── pages/
 │   │   ├── Login.tsx            # 登录页（QQ / 微信 / 游客）
 │   │   ├── Callback.tsx         # 登录回调处理页
-│   │   ├── Home.tsx             # 大厅：创建/加入/我的房间/等待中/对战中
-│   │   ├── Room.tsx             # 对局页：棋盘 + 玩家信息 + 状态 + 聊天
+│   │   ├── Home.tsx             # 大厅：创建/匹配/加入/我的房间/等待中（含配置标识）/对战中
+│   │   ├── Room.tsx             # 对局页：棋盘 + 玩家信息 + 计时 + 状态 + 聊天 + 解散
 │   │   ├── Leaderboard.tsx      # 排行榜
 │   │   └── UserCenter.tsx       # 个人中心（我的战绩）
 │   ├── api.ts                   # 前端 API 封装 + 本地存储工具
@@ -123,12 +136,23 @@ interface Room {
     black: { nickname: string }           // 房主（黑方）
     white: { nickname: string } | null    // 加入者（白方）
   }
-  board: ('black' | 'white' | null)[][]    // 15×15 棋盘
+  board: ('black' | 'white' | null)[][]    // 棋盘（9/13/15）
+  boardSize: number                        // 棋盘大小（9/13/15，默认 15）
   currentTurn: 'black' | 'white'
   winner: 'black' | 'white' | 'draw' | null
+  winLine?: [number, number][] | null      // 获胜的 5 连位置（用于高亮）
   status: 'waiting' | 'playing' | 'finished'
   createdAt: number
   lastActiveAt: number                    // 心跳时间戳，用于 TTL 回收
+  moves?: MoveRecord[]                    // 棋谱（含坐标、颜色、时间）
+  request?: ConsentRequest | null        // 当前未决请求（悔棋/求和/再来一局）
+  forbid: boolean                         // 是否启用黑方禁手规则
+  timer: { perMoveMs: number; totalMs: number }  // 计时配置（0 = 不限）
+  password: string | null                // 私密房密码（null = 公开房）
+  turnStartAt: number                     // 当前回合开始时间戳
+  blackUsedMs: number                      // 黑方已用总时间
+  whiteUsedMs: number                      // 白方已用总时间
+  timeLoser: 'black' | 'white' | null     // 因超时判负的一方
   messages?: ChatMessage[]                // 局内聊天（最近 50 条）
 }
 ```
@@ -178,12 +202,14 @@ TTL（基于 `lastActiveAt`，见 `list.ts`）：
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| POST | `/create` | 创建房间。body: `{ nickname, forbid?, timed? }`。`forbid`/`timed` 默认 true。返回完整 Room。 |
-| POST | `/join` | 加入房间成为白方。body: `{ roomId, nickname }`。强一致校验房间仍为 waiting 且白方空缺，否则返回“房间已满”。 |
+| POST | `/create` | 创建房间。body: `{ nickname, forbid?, timed?, boardSize?, password? }`。`forbid`/`timed` 默认 true，`boardSize` 默认 15（可选 9/13/15），`password` 留空为公开房。返回 Room（不含密码）。 |
+| POST | `/match` | 快速匹配。body: `{ nickname, forbid?, timed?, boardSize? }`。自动加入无密码的等待中房间，无则创建新房。返回 `{ ok, data, matched }`。 |
+| POST | `/join` | 加入房间成为白方。body: `{ roomId, nickname, password? }`。强一致校验 + 密码校验。 |
+| POST | `/kick` | 房主解散房间。body: `{ roomId, nickname }`。仅 waiting 阶段、仅黑方可操作。 |
 | POST | `/leave` | 玩家主动离开。body: `{ roomId, nickname }`。玩家离开即删除房间。 |
-| GET  | `/list` | 返回大厅列表 `{ waiting: [...], playing: [...] }`，并顺带执行 TTL 回收。 |
-| GET  | `/state?roomId=xxx&observer=1` | 拉取房间最新状态。非观战者更新心跳，并顺带检查超时判负。 |
-| POST | `/move` | 落子。body: `{ roomId, nickname, row, col }`。校验回合/位置/禁手，判定胜负并写排行榜。 |
+| GET  | `/list` | 返回大厅列表 `{ waiting: [...], playing: [...] }`，waiting 含 hasPassword/forbid/timed/boardSize，并执行 TTL 回收。 |
+| GET  | `/state?roomId=xxx&observer=1` | 拉取房间最新状态。非观战者更新心跳，并检查超时判负。 |
+| POST | `/move` | 落子。body: `{ roomId, nickname, row, col }`。校验回合/位置/禁手/超时，判定胜负并写排行榜。 |
 | POST | `/request` | 悔棋/求和/再来一局（双向确认）。body: `{ roomId, nickname, action, type? }`。见下表。 |
 | POST | `/action` | 认输。body: `{ roomId, nickname, action:'resign' }`。 |
 | POST | `/rejoin` | 断线重进校验。body: `{ roomId, nickname }`。仅本局玩家可重进。 |
@@ -233,6 +259,7 @@ EdgeOne Blob Storage 的 `get(key)` 默认是**最终一致**读取，`get(key, 
 - **大厅列表 `list.ts`** 对每个房间用强一致读，保证首页展示的状态是最新的。
 - **排行榜**的读与写均使用强一致读，避免并发结算时后写覆盖先写导致条目丢失。
 - 仍保留弱一致读的地方：`create.ts` 生成房间号时的查重（碰撞概率极低，弱读可接受）。
+- **密码安全**：`password` 字段仅存储在 Blob 中，所有返回给前端的接口（create / join / state / rejoin / match）均通过解构 `const { password, ...safeRoom } = room` 剔除密码明文，前端永远拿不到密码。
 
 ## 本次修复的 Bug
 
@@ -303,6 +330,32 @@ EdgeOne Blob Storage 的 `get(key)` 默认是**最终一致**读取，`get(key, 
 ### 棋谱记录
 
 每步落子记录到 `room.moves`（含坐标、颜色、时间），用于悔棋回退与未来复盘功能。
+
+## 匹配与房间层（Phase 2 新增）
+
+### 快速匹配
+
+点击"快速匹配"按钮，后端 `match.ts` 扫描所有等待中的无密码房间，强一致校验后自动加入。若无合适房间则自动创建一个公开房间。匹配仅加入无密码房间，私密房需手动输入房间号加入。
+
+### 私密房
+
+创建房间时可设置密码（最长 20 字符）。设密码的房间在大厅列表中标记"私密"图标，点击加入时弹出密码输入框。密码校验在后端 `join.ts` 完成，密码明文从不返回给前端。
+
+### 棋盘大小
+
+支持 9×9 / 13×13 / 15×15 三种棋盘规格。创建时选择，棋盘大小存储在 `room.boardSize` 中，所有游戏逻辑（胜负判定、禁手检测、边界检查）均基于 `board.length` 动态适配。棋盘组件的星位也根据大小动态计算。
+
+### 房间配置展示
+
+大厅列表中每个等待中的房间显示配置标识：
+- **私密** — 有密码
+- **9×9 / 13×13** — 非标准棋盘（15×15 不显示）
+- **禁手** — 启用禁手规则
+- **计时** — 启用计时模式
+
+### 房主解散
+
+等待阶段（waiting），房主（黑方）可点击"解散房间"按钮取消等待。后端 `kick.ts` 校验权限后直接删除房间。对局开始后不可解散（需使用认输或离开）。
 
 ### 测试
 

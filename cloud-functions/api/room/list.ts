@@ -4,6 +4,10 @@ interface WaitingRoom {
   id: string;
   blackNickname: string;
   createdAt: number;
+  hasPassword: boolean;
+  forbid: boolean;
+  timed: boolean;
+  boardSize: number;
 }
 
 interface PlayingRoom {
@@ -30,7 +34,7 @@ export async function onRequest() {
     const now = Date.now();
 
     for (const blob of result.blobs) {
-      // 强一致读：保证首页展示的房间状态是最新的，避免“已有人加入却仍显示等待中”
+      // 强一致读：保证首页展示的房间状态是最新的，避免"已有人加入却仍显示等待中"
       const data = await store.get(blob.key, { consistency: "strong" });
       if (!data) continue;
       try {
@@ -51,6 +55,10 @@ export async function onRequest() {
               id: room.id,
               blackNickname: room.players.black.nickname,
               createdAt: room.createdAt ?? 0,
+              hasPassword: !!room.password,
+              forbid: room.forbid !== false,
+              timed: !!(room.timer && (room.timer.perMoveMs > 0 || room.timer.totalMs > 0)),
+              boardSize: room.boardSize ?? 15,
             });
           }
         } else if (room.status === "playing" && !room.winner) {

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { createRoom, joinRoom, listRooms, rejoinRoom, getMyRooms, removeMyRoom, observeRoom } from '../api'
+import { createRoom, joinRoom, listRooms, rejoinRoom, getMyRooms, removeMyRoom, observeRoom, matchRoom } from '../api'
 import type { Room, WaitingRoomInfo, PlayingRoomInfo } from '../types'
 
 interface HomeProps {
@@ -20,6 +20,18 @@ export default function Home({ nickname: initialNickname, avatar, onLogout, onLe
   const [playingRooms, setPlayingRooms] = useState<PlayingRoomInfo[]>([])
   const [myRoomsData, setMyRoomsData] = useState<Room[]>([])
   const inputRef = useRef<HTMLInputElement>(null)
+
+  // 创建房间配置
+  const [showConfig, setShowConfig] = useState(false)
+  const [boardSize, setBoardSize] = useState(15)
+  const [forbid, setForbid] = useState(true)
+  const [timed, setTimed] = useState(true)
+  const [password, setPassword] = useState('')
+
+  // 密码加入弹窗
+  const [showPwdPrompt, setShowPwdPrompt] = useState(false)
+  const [pendingRoomId, setPendingRoomId] = useState('')
+  const [joinPwd, setJoinPwd] = useState('')
 
   // Refresh rooms list
   const fetchRooms = useCallback(async () => {
@@ -59,7 +71,12 @@ export default function Home({ nickname: initialNickname, avatar, onLogout, onLe
   const handleCreate = async () => {
     if (!nickname.trim()) { setError('请输入昵称'); return }
     setLoading(true); setError('')
-    const res = await createRoom(nickname.trim())
+    const res = await createRoom(nickname.trim(), {
+      boardSize,
+      forbid,
+      timed,
+      password: password.trim() || undefined,
+    })
     setLoading(false)
     if (res.ok && res.data) {
       onEnter(res.data, nickname.trim())
@@ -68,8 +85,33 @@ export default function Home({ nickname: initialNickname, avatar, onLogout, onLe
     }
   }
 
-  const handleJoin = async (roomId: string) => {
+  const handleMatch = async () => {
+    if (!nickname.trim()) { setError('请输入昵称'); return }
+    setLoading(true); setError('')
+    const res = await matchRoom(nickname.trim(), {
+      boardSize,
+      forbid,
+      timed,
+    })
+    setLoading(false)
+    if (res.ok && res.data) {
+      onEnter(res.data, nickname.trim())
+    } else {
+      setError(res.error || '匹配失败')
+    }
+  }
+
+  const handleJoin = async (roomId: string, hasPassword?: boolean) => {
     if (!nickname.trim()) { setError('请先输入昵称'); inputRef.current?.focus(); return }
+
+    // 如果有密码，弹出密码输入框
+    if (hasPassword) {
+      setPendingRoomId(roomId)
+      setJoinPwd('')
+      setShowPwdPrompt(true)
+      return
+    }
+
     setLoading(true); setError('')
     const res = await joinRoom(roomId, nickname.trim())
     setLoading(false)
@@ -77,6 +119,19 @@ export default function Home({ nickname: initialNickname, avatar, onLogout, onLe
       onEnter(res.data, nickname.trim())
     } else {
       setError(res.error || '加入房间失败')
+    }
+  }
+
+  const handleJoinWithPassword = async () => {
+    if (!nickname.trim()) { setError('请输入昵称'); return }
+    setLoading(true); setError('')
+    const res = await joinRoom(pendingRoomId, nickname.trim(), joinPwd.trim())
+    setLoading(false)
+    if (res.ok && res.data) {
+      setShowPwdPrompt(false)
+      onEnter(res.data, nickname.trim())
+    } else {
+      setError(res.error || '密码错误')
     }
   }
 
@@ -138,7 +193,7 @@ export default function Home({ nickname: initialNickname, avatar, onLogout, onLe
           <p className="text-sm text-gray-400 mt-0.5">你好, {nickname}</p>
         </div>
 
-        {/* Create / Join */}
+        {/* Create / Match */}
         <div className="bg-white rounded-2xl p-4 border border-gray-200 shadow-sm mb-4">
           <div className="flex gap-2">
             <input
@@ -150,14 +205,68 @@ export default function Home({ nickname: initialNickname, avatar, onLogout, onLe
               className="flex-1 px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-800 placeholder-gray-400 focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400/50 transition text-sm"
               maxLength={10}
             />
-            <button
-              onClick={handleCreate}
-              disabled={loading || !nickname.trim()}
-              className="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white disabled:opacity-50 disabled:cursor-not-allowed rounded-xl text-sm font-medium shadow-md transition cursor-pointer active:scale-[0.98] shrink-0"
-            >
-              创建
-            </button>
           </div>
+
+          {/* Config toggle */}
+          <button onClick={() => setShowConfig(!showConfig)} className="mt-2 text-xs text-gray-400 hover:text-gray-600 transition cursor-pointer">
+            {showConfig ? '收起配置 ▲' : '创建配置 ▼'}
+          </button>
+
+          {showConfig && (
+            <div className="mt-3 space-y-3 animate-slide-up">
+              {/* Board size selector */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-500 w-16 shrink-0">棋盘大小</span>
+                <div className="flex gap-1.5 flex-1">
+                  {[9, 13, 15].map(size => (
+                    <button
+                      key={size}
+                      onClick={() => setBoardSize(size)}
+                      className={`flex-1 py-1.5 text-xs rounded-lg border transition cursor-pointer ${
+                        boardSize === size
+                          ? 'bg-indigo-600 text-white border-indigo-600'
+                          : 'bg-gray-50 text-gray-500 border-gray-200 hover:border-gray-300'
+                      }`}
+                    >
+                      {size}×{size}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Toggles */}
+              <div className="flex items-center gap-4">
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={forbid}
+                    onChange={(e) => setForbid(e.target.checked)}
+                    className="w-3.5 h-3.5 accent-indigo-600"
+                  />
+                  <span className="text-xs text-gray-600">禁手规则</span>
+                </label>
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={timed}
+                    onChange={(e) => setTimed(e.target.checked)}
+                    className="w-3.5 h-3.5 accent-indigo-600"
+                  />
+                  <span className="text-xs text-gray-600">计时模式</span>
+                </label>
+              </div>
+
+              {/* Password */}
+              <input
+                type="text"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="密码（留空为公开房）"
+                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-gray-800 placeholder-gray-400 focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400/50 transition text-sm"
+                maxLength={20}
+              />
+            </div>
+          )}
 
           {error && (
             <div className="mt-3 flex items-center gap-2 text-red-600 text-xs bg-red-50 rounded-xl py-2 px-3 border border-red-200">
@@ -167,6 +276,24 @@ export default function Home({ nickname: initialNickname, avatar, onLogout, onLe
               {error}
             </div>
           )}
+
+          {/* Action buttons */}
+          <div className="mt-3 flex gap-2">
+            <button
+              onClick={handleCreate}
+              disabled={loading || !nickname.trim()}
+              className="flex-1 px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white disabled:opacity-50 disabled:cursor-not-allowed rounded-xl text-sm font-medium shadow-md transition cursor-pointer active:scale-[0.98]"
+            >
+              创建房间
+            </button>
+            <button
+              onClick={handleMatch}
+              disabled={loading || !nickname.trim()}
+              className="flex-1 px-5 py-2.5 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white disabled:opacity-50 disabled:cursor-not-allowed rounded-xl text-sm font-medium shadow-md transition cursor-pointer active:scale-[0.98]"
+            >
+              快速匹配
+            </button>
+          </div>
 
           <button onClick={() => setShowManual(!showManual)} className="mt-2 text-xs text-gray-400 hover:text-gray-600 transition cursor-pointer">
             {showManual ? '收起' : '输入房间 ID 加入'}
@@ -179,6 +306,28 @@ export default function Home({ nickname: initialNickname, avatar, onLogout, onLe
             </div>
           )}
         </div>
+
+        {/* Password prompt dialog */}
+        {showPwdPrompt && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 animate-slide-up" onClick={() => setShowPwdPrompt(false)}>
+            <div className="bg-white rounded-2xl p-5 mx-6 max-w-xs w-full shadow-xl" onClick={e => e.stopPropagation()}>
+              <h3 className="text-sm font-medium text-gray-700 mb-3">该房间需要密码</h3>
+              <input
+                type="text"
+                value={joinPwd}
+                onChange={(e) => setJoinPwd(e.target.value)}
+                placeholder="输入房间密码"
+                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-gray-800 placeholder-gray-400 focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400/50 transition text-sm mb-3"
+                autoFocus
+                onKeyDown={(e) => { if (e.key === 'Enter') handleJoinWithPassword() }}
+              />
+              <div className="flex gap-2">
+                <button onClick={() => setShowPwdPrompt(false)} className="flex-1 px-3 py-2 text-xs rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 transition cursor-pointer">取消</button>
+                <button onClick={handleJoinWithPassword} disabled={loading || !joinPwd.trim()} className="flex-1 px-3 py-2 text-xs rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-50 transition cursor-pointer">确认加入</button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* My Rooms */}
         {myRoomsData.length > 0 && (
@@ -226,16 +375,26 @@ export default function Home({ nickname: initialNickname, avatar, onLogout, onLe
           ) : (
             <div className="divide-y divide-gray-100 max-h-[280px] overflow-y-auto">
               {waitingRooms.map((r) => (
-                <button key={r.id} onClick={() => { setError(''); handleJoin(r.id) }} disabled={loading} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition text-left cursor-pointer disabled:opacity-50">
+                <button key={r.id} onClick={() => { setError(''); handleJoin(r.id, r.hasPassword) }} disabled={loading} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition text-left cursor-pointer disabled:opacity-50">
                   <div className="shrink-0 w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center">
-                    <svg className="w-4 h-4 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                    </svg>
+                    {r.hasPassword ? (
+                      <svg className="w-4 h-4 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                      </svg>
+                    ) : (
+                      <svg className="w-4 h-4 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                      </svg>
+                    )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="text-sm font-mono tracking-wider text-indigo-600">{r.id}</span>
                       <span className="text-[10px] px-1.5 py-px rounded-full bg-green-50 text-green-600 border border-green-200 shrink-0">等待中</span>
+                      {r.hasPassword && <span className="text-[10px] px-1.5 py-px rounded-full bg-amber-50 text-amber-600 border border-amber-200 shrink-0">私密</span>}
+                      {r.boardSize !== 15 && <span className="text-[10px] px-1.5 py-px rounded-full bg-blue-50 text-blue-600 border border-blue-200 shrink-0">{r.boardSize}×{r.boardSize}</span>}
+                      {r.forbid && <span className="text-[10px] px-1.5 py-px rounded-full bg-rose-50 text-rose-600 border border-rose-200 shrink-0">禁手</span>}
+                      {r.timed && <span className="text-[10px] px-1.5 py-px rounded-full bg-purple-50 text-purple-600 border border-purple-200 shrink-0">计时</span>}
                     </div>
                     <div className="text-xs text-gray-400 mt-0.5">房主: <span className="text-gray-500">{r.blackNickname}</span></div>
                   </div>

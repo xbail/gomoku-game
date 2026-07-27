@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import Board from '../components/Board'
 import ChatPanel from '../components/ChatPanel'
-import { getRoomState, makeMove, saveMyRoom, getChat, leaveRoom, requestAction, resign } from '../api'
+import { getRoomState, makeMove, saveMyRoom, getChat, leaveRoom, requestAction, resign, kickRoom } from '../api'
 import { playStoneSound } from '../sound'
 import type { Room as RoomType, PlayerColor, CellState, ChatMessage, RequestType } from '../types'
 
@@ -151,6 +151,17 @@ export default function Room({ room: initialRoom, nickname, onLeave, isObserver 
     }
   }
 
+  const handleDisband = async () => {
+    if (!confirm('确认解散房间？')) return
+    const res = await kickRoom(room.id, nickname)
+    if (res.ok) {
+      onLeave()
+    } else {
+      setNotice(res.error || '解散失败')
+      setTimeout(() => setNotice(null), 2500)
+    }
+  }
+
   const handleCopyRoomId = async () => {
     try {
       await navigator.clipboard.writeText(room.id)
@@ -211,6 +222,9 @@ export default function Room({ room: initialRoom, nickname, onLeave, isObserver 
           </div>
           {room.forbid && (
             <span className="text-[10px] px-1.5 py-px rounded-full bg-rose-50 text-rose-600 border border-rose-200 shrink-0">禁手</span>
+          )}
+          {room.boardSize && room.boardSize !== 15 && (
+            <span className="text-[10px] px-1.5 py-px rounded-full bg-blue-50 text-blue-600 border border-blue-200 shrink-0">{room.boardSize}×{room.boardSize}</span>
           )}
           <button
             onClick={handleCopyRoomId}
@@ -361,8 +375,16 @@ export default function Room({ room: initialRoom, nickname, onLeave, isObserver 
           </div>
         )}
         {isWaiting && !isObserver && (
-          <div className="text-[11px] text-gray-400 font-medium tracking-wide">
-            将房间 ID 分享给好友
+          <div className="flex flex-col items-center gap-2">
+            <button
+              onClick={handleDisband}
+              className="px-4 py-1.5 text-xs rounded-lg border border-red-200 text-red-500 hover:bg-red-50 transition cursor-pointer"
+            >
+              解散房间
+            </button>
+            <div className="text-[11px] text-gray-400 font-medium tracking-wide">
+              将房间 ID 分享给好友
+            </div>
           </div>
         )}
         {isObserver && (

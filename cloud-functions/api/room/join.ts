@@ -3,6 +3,7 @@ import { getRoomStrong, saveRoom } from "./_utils";
 interface JoinBody {
   roomId: string;
   nickname: string;
+  password?: string;
 }
 
 export async function onRequest(context: { request: Request }) {
@@ -17,7 +18,7 @@ export async function onRequest(context: { request: Request }) {
     }
 
     // 强一致读：避免读到陈旧的 waiting 状态，否则对战中房间会被误判为可加入，
-    // 后加入者会覆盖掉已有的白方玩家（即“把对战中某人挤掉”的 Bug）
+    // 后加入者会覆盖掉已有的白方玩家（即"把对战中某人挤掉"的 Bug）
     const room = await getRoomStrong(body.roomId.trim().toUpperCase());
     if (!room) {
       return new Response(JSON.stringify({ ok: false, error: "房间不存在" }), { status: 404 });
@@ -26,6 +27,14 @@ export async function onRequest(context: { request: Request }) {
     // 双重校验：房间必须仍处于等待中，且白方尚未被人占用
     if (room.status !== "waiting" || room.players?.white) {
       return new Response(JSON.stringify({ ok: false, error: "房间已满" }), { status: 400 });
+    }
+
+    // 私密房密码校验
+    if (room.password) {
+      const inputPwd = body.password?.trim() ?? "";
+      if (inputPwd !== room.password) {
+        return new Response(JSON.stringify({ ok: false, error: "密码错误" }), { status: 403 });
+      }
     }
 
     const nickname = body.nickname.trim();
@@ -42,7 +51,9 @@ export async function onRequest(context: { request: Request }) {
 
     await saveRoom(room);
 
-    return new Response(JSON.stringify({ ok: true, data: room }), { status: 200 });
+    // 返回时不暴露密码
+    const { password: _omit, ...safeRoom } = room;
+    return new Response(JSON.stringify({ ok: true, data: safeRoom }), { status: 200 });
   } catch (e) {
     return new Response(JSON.stringify({ ok: false, error: String(e) }), { status: 500 });
   }

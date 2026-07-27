@@ -94,7 +94,8 @@ export async function onRequest(context: { request: Request }) {
     }
 
     const { row, col } = body;
-    if (row < 0 || row >= 15 || col < 0 || col >= 15) {
+    const size = room.board.length;
+    if (row < 0 || row >= size || col < 0 || col >= size) {
       return new Response(JSON.stringify({ ok: false, error: "位置无效" }), { status: 400 });
     }
 

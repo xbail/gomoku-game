@@ -28,7 +28,7 @@ export async function onRequest(context: { request: Request }) {
       return new Response(JSON.stringify({ ok: false, error: "你不是本局玩家" }), { status: 400 });
     }
 
-    room.board = createEmptyBoard();
+    room.board = createEmptyBoard(room.boardSize || 15);
     room.currentTurn = "black";
     room.winner = null;
     room.status = room.players.white ? "playing" : "waiting";

@@ -38,6 +38,7 @@ export interface Room {
     white: Player | null
   }
   board: CellState[][]
+  boardSize?: number                    // 棋盘大小（9/13/15），默认 15
   currentTurn: PlayerColor
   winner: PlayerColor | 'draw' | null
   winLine?: [number, number][] | null   // 获胜的 5 连位置（用于高亮）
@@ -58,6 +59,10 @@ export interface WaitingRoomInfo {
   id: string
   blackNickname: string
   createdAt: number
+  hasPassword: boolean                  // 是否为私密房
+  forbid: boolean                        // 是否启用禁手
+  timed: boolean                         // 是否启用计时
+  boardSize: number                      // 棋盘大小
 }
 
 export interface PlayingRoomInfo {

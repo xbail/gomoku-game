@@ -35,19 +35,48 @@ export function removeMyRoom(roomId: string) {
 }
 
 export interface CreateRoomOptions {
-  forbid?: boolean    // 默认 true
-  timed?: boolean     // 默认 true
+  forbid?: boolean       // 默认 true
+  timed?: boolean        // 默认 true
+  boardSize?: number     // 9 / 13 / 15，默认 15
+  password?: string      // 私密房密码，留空为公开房
 }
 
 export function createRoom(nickname: string, opts?: CreateRoomOptions) {
   return request<Room>(`${BASE}/create`, {
     method: 'POST',
-    body: JSON.stringify({ nickname, forbid: opts?.forbid, timed: opts?.timed }),
+    body: JSON.stringify({
+      nickname,
+      forbid: opts?.forbid,
+      timed: opts?.timed,
+      boardSize: opts?.boardSize,
+      password: opts?.password,
+    }),
   })
 }
 
-export function joinRoom(roomId: string, nickname: string) {
+export function joinRoom(roomId: string, nickname: string, password?: string) {
   return request<Room>(`${BASE}/join`, {
+    method: 'POST',
+    body: JSON.stringify({ roomId, nickname, password }),
+  })
+}
+
+// 快速匹配：自动加入无密码的等待中房间，没有则创建新房间
+export function matchRoom(nickname: string, opts?: CreateRoomOptions) {
+  return request<Room>(`${BASE}/match`, {
+    method: 'POST',
+    body: JSON.stringify({
+      nickname,
+      forbid: opts?.forbid,
+      timed: opts?.timed,
+      boardSize: opts?.boardSize,
+    }),
+  })
+}
+
+// 房主解散房间（仅 waiting 阶段）
+export function kickRoom(roomId: string, nickname: string) {
+  return request<null>(`${BASE}/kick`, {
     method: 'POST',
     body: JSON.stringify({ roomId, nickname }),
   })

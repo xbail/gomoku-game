@@ -147,7 +147,7 @@ export async function onRequest(context: { request: Request }) {
         return new Response(JSON.stringify({ ok: true, data: room }), { status: 200 });
       } else if (req.type === "reset") {
         // 再来一局：清空棋盘，双方仍在则 playing
-        room.board = createEmptyBoard();
+        room.board = createEmptyBoard(room.boardSize || 15);
         room.currentTurn = "black";
         room.winner = null;
         room.winLine = null;

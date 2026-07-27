@@ -12,11 +12,11 @@ interface BoardProps {
   readOnly?: boolean
 }
 
-const N = 15
-const GAPS = N - 1
 const FRAME_PX = 4
 
 export default function Board({ board, currentTurn, myColor, winner, onCellClick, lastMove, winLine, readOnly }: BoardProps) {
+  const N = board.length
+  const GAPS = N - 1
   const isMyTurn = myColor === currentTurn && !winner
   const interactive = !readOnly
   const [toast, setToast] = useState<string | null>(null)
@@ -57,12 +57,17 @@ export default function Board({ board, currentTurn, myColor, winner, onCellClick
   }
 
   const starPoints = useMemo(() => {
+    // 根据棋盘大小动态计算星位
+    const mid = Math.floor(GAPS / 2)
+    const q1 = Math.floor(GAPS / 4)
+    const q3 = GAPS - q1
+    const coords = N <= 9 ? [q1, mid, q3] : [Math.max(3, q1), mid, Math.min(N - 4, q3)]
     const pts: [number, number][] = []
-    for (const r of [3, 7, 11]) {
-      for (const c of [3, 7, 11]) pts.push([r, c])
+    for (const r of coords) {
+      for (const c of coords) pts.push([r, c])
     }
     return pts
-  }, [])
+  }, [N, GAPS])
 
   const boardPx = 'min(94vw, 72vh, 720px)'
   const intersectionPct = (i: number) => `${(i / GAPS) * 100}%`
