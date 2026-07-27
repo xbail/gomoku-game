@@ -21,7 +21,7 @@
 - [匹配与房间层（Phase 2 新增）](#匹配与房间层phase-2-新增)
 - [本地开发](#本地开发)
 - [部署到 EdgeOne](#部署到-edgeone)
-- [Blob Storage 配置（重要）](#blob-storage-配置重要)
+- [Blob Storage 配置说明](#blob-storage-配置说明)
 - [环境变量](#环境变量)
 - [已知限制](#已知限制)
 
@@ -297,17 +297,17 @@ EdgeOne Blob Storage 的 `get(key)` 默认是**最终一致**读取，`get(key, 
 
 针对娱乐场景的三处优化：
 
-### 1. Blob Storage 连接失败：提示更明确 + 懒加载
+### 1. Blob Storage 连接失败：云函数未打包存储 SDK
 
-**现象**：部署后创建/加入/列表接口全部报错，提示像「数据库没连上」。
+**现象**：部署后创建/加入/列表接口全部 500，像「数据库没连上」。
 
-**根因**：`_utils.ts` 在模块加载阶段直接执行 `getStore("GAME_BLOB")`，若控制台未创建该 Blob Storage 命名空间，整个云函数加载即抛错，所有接口 500，且错误信息不可读。
+**根因**：本项目是「Vite 前端 + 云函数」混合工程，`edgeone.json` 指定了 `buildCommand` 与 `outputDirectory`，构建器默认只处理前端产物，不会自动把 `@edgeone/pages-blob` 复制到云函数运行时。导致云函数 `import { getStore } from "@edgeone/pages-blob"` 失败，所有依赖存储的接口崩溃。
 
 **修复**：
-- 改为懒加载——首次真正读写时才初始化 store，避免模块加载即崩溃。
-- 新增 `StorageError`：未配置时返回「存储服务未就绪：请在 EdgeOne 控制台创建名为 GAME_BLOB 的命名空间」，并附配置指引（见上文「Blob Storage 配置」）。
-- 所有存储操作（get/set/list/delete）统一 try/catch，异常转成带操作上下文的友好提示。
-- 各接口 catch 改为 `e.message`，前端不再显示 `Error:`/`StorageError:` 前缀。
+- `edgeone.json` 增加 `"node-functions": { "external_node_modules": ["@edgeone/pages-blob"] }`，让构建器正确打包该依赖。
+- Blob 命名空间 `GAME_BLOB` 由平台首次调用 `getStore()` 时自动创建，控制台不能手动新建——之前误提示用户去控制台创建命名空间，已更正。
+- 各接口 catch 改为 `e.message`，错误信息更可读。
+- `_utils.ts` 还原为官方标准写法（顶层 `getStore`），去除之前为绕开问题而加的懒加载 Proxy。
 
 ### 2. 边缘棋子被裁切只显示一半
 
@@ -424,25 +424,33 @@ npm run lint
 
 1. 将本仓库导入 EdgeOne Pages。
 2. `edgeone.json` 已配置：构建命令 `npm run build`，输出目录 `dist`。
-3. **创建 Blob Storage 命名空间（重要，不配则所有接口报错）**：在 EdgeOne 控制台「站点设置 → 存储 → Blob Storage」中新建一个名为 `GAME_BLOB` 的命名空间。云函数通过 `getStore("GAME_BLOB")` 读写房间与排行榜，未创建时创建/匹配/列表等接口会返回「存储服务未就绪」错误。
+3. **确认云函数存储依赖已配置（重要，不配则所有接口报错）**：`edgeone.json` 中需配置 `"node-functions": { "external_node_modules": ["@edgeone/pages-blob"] }`（本项目已配好）。该配置让构建器把 `@edgeone/pages-blob` SDK 正确打包进云函数产物；缺失时云函数 `import` 失败，所有接口 500，表现为"数据库连不上"。Blob 命名空间 `GAME_BLOB` 由平台在首次调用 `getStore()` 时自动创建，控制台不支持手动新建，无需任何额外操作。
 4. 在 EdgeOne 控制台为站点配置环境变量（见下）。
 5. 部署后，云函数挂载在 `/api/*`，前端与 API 同源，无需额外配置跨域。
 
-## Blob Storage 配置（重要）
+## Blob Storage 配置说明
 
-本项目所有持久化（房间、对局状态、排行榜）都落在名为 `GAME_BLOB` 的 Blob Storage 命名空间上，**这是「数据库」**。首次部署后若出现以下现象，多半是未创建该命名空间：
+本项目所有持久化（房间、对局状态、排行榜）都落在名为 `GAME_BLOB` 的 Blob Storage 命名空间上，**这是「数据库」**。首次部署后若出现以下现象，多半是云函数未正确加载 `@edgeone/pages-blob` SDK：
 
-- 创建房间失败，报「存储服务未就绪」
+- 创建/加入/匹配房间失败，接口返回 500
 - 大厅列表加载失败 / 一直空白
-- 落子、加入、匹配等任意接口 500
+- 落子等任意接口报错
 
-**配置步骤：**
+**根因与修复：**
 
-1. 进入 EdgeOne 控制台 → 选择你的站点 → 「站点设置 → 存储 → Blob Storage」。
-2. 点击「新建命名空间」，名称填 `GAME_BLOB`（必须完全一致，区分大小写）。
-3. 保存后无需重启，下一次请求即生效（云函数已做懒加载，命名空间创建后自动可用）。
+本项目是「Vite 前端 + 云函数」混合工程，`edgeone.json` 指定了 `buildCommand` 与 `outputDirectory`，构建器默认只处理前端产物，不会自动把 `@edgeone/pages-blob` 复制到云函数运行时。必须显式声明：
 
-> 命名空间名称可在 `cloud-functions/api/room/_utils.ts` 顶部的 `STORE_NAME` 常量中修改。若改了常量，控制台里也要对应改名。
+```jsonc
+{
+  "node-functions": {
+    "external_node_modules": ["@edgeone/pages-blob"]
+  }
+}
+```
+
+本项目 `edgeone.json` 已包含此配置。若你 fork 后精简过该文件，请确保这一项存在，否则云函数 `import { getStore } from "@edgeone/pages-blob"` 会直接失败。
+
+> Blob 命名空间 `GAME_BLOB` 由平台在首次调用 `getStore("GAME_BLOB")` 时自动创建，控制台仅支持只读浏览，不能手动新建。命名空间名称可在 `cloud-functions/api/room/_utils.ts` 顶部的 `getStore("GAME_BLOB")` 调用处修改。
 
 ## 环境变量
 
