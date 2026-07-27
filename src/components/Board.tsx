@@ -13,7 +13,7 @@ interface BoardProps {
 
 const N = 15
 const GAPS = N - 1
-const FRAME_PX = 8
+const FRAME_PX = 4
 
 export default function Board({ board, currentTurn, myColor, winner, onCellClick, lastMove, readOnly }: BoardProps) {
   const isMyTurn = myColor === currentTurn && !winner

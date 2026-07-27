@@ -55,8 +55,9 @@ export function makeMove(roomId: string, nickname: string, row: number, col: num
   })
 }
 
-export function getRoomState(roomId: string) {
-  return request<Room>(`${BASE}/state?roomId=${encodeURIComponent(roomId)}`)
+export function getRoomState(roomId: string, observer = false) {
+  const q = `roomId=${encodeURIComponent(roomId)}${observer ? '&observer=1' : ''}`
+  return request<Room>(`${BASE}/state?${q}`)
 }
 
 export function resetRoom(roomId: string, nickname: string) {
@@ -70,9 +71,9 @@ export function listRooms() {
   return request<RoomList>(`${BASE}/list`)
 }
 
-// 观战：进入指定房间（只读）
+// 观战：进入指定房间（只读，不更新心跳）
 export function observeRoom(roomId: string) {
-  return request<Room>(`${BASE}/state?roomId=${encodeURIComponent(roomId)}`)
+  return getRoomState(roomId, true)
 }
 
 export function getLoginUrl(type: string) {
@@ -114,6 +115,14 @@ export function getChat(roomId: string) {
 // 重进房间
 export function rejoinRoom(roomId: string, nickname: string) {
   return request<Room>(`${BASE}/rejoin`, {
+    method: 'POST',
+    body: JSON.stringify({ roomId, nickname }),
+  })
+}
+
+// 离开房间（玩家主动退出，后端清理房间）
+export function leaveRoom(roomId: string, nickname: string) {
+  return request<null>(`${BASE}/leave`, {
     method: 'POST',
     body: JSON.stringify({ roomId, nickname }),
   })

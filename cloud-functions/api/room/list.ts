@@ -1,4 +1,4 @@
-import { store } from "./_utils";
+import { store, deleteRoom } from "./_utils";
 
 interface WaitingRoom {
   id: string;
@@ -18,7 +18,9 @@ interface RoomList {
   playing: PlayingRoom[];
 }
 
-const WAITING_TTL_MS = 3 * 60 * 1000; // 3 minutes
+const WAITING_TTL_MS = 3 * 60 * 1000; // 等待中：3 分钟无活动清理
+const PLAYING_TTL_MS = 60 * 1000; // 对战中：60 秒无活动清理（双方都不在线）
+const FINISHED_TTL_MS = 30 * 1000; // 已结束：30 秒后清理
 
 export async function onRequest() {
   try {
@@ -32,13 +34,17 @@ export async function onRequest() {
       if (!data) continue;
       try {
         const room = JSON.parse(data);
+        const lastActive = room.lastActiveAt ?? room.createdAt ?? 0;
+        const idle = now - lastActive;
+
+        // 跳过非房间键（如 _leaderboard）
+        if (!room.id || !room.status) continue;
+
         if (room.status === "waiting") {
-          // clean up stale waiting rooms
-          if (now - (room.createdAt ?? 0) > WAITING_TTL_MS) {
-            await store.delete(blob.key);
+          if (idle > WAITING_TTL_MS) {
+            await deleteRoom(room.id);
             continue;
           }
-
           if (room.players?.black?.nickname) {
             waiting.push({
               id: room.id,
@@ -47,6 +53,10 @@ export async function onRequest() {
             });
           }
         } else if (room.status === "playing" && !room.winner) {
+          if (idle > PLAYING_TTL_MS) {
+            await deleteRoom(room.id);
+            continue;
+          }
           if (room.players?.black?.nickname && room.players?.white?.nickname) {
             playing.push({
               id: room.id,
@@ -54,6 +64,11 @@ export async function onRequest() {
               whiteNickname: room.players.white.nickname,
               createdAt: room.createdAt ?? 0,
             });
+          }
+        } else if (room.status === "finished" || room.winner) {
+          // 已结束的对局保留短时间供双方看到结果，然后清理
+          if (idle > FINISHED_TTL_MS) {
+            await deleteRoom(room.id);
           }
         }
       } catch {

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import Board from '../components/Board'
 import ChatPanel from '../components/ChatPanel'
-import { getRoomState, makeMove, resetRoom, saveMyRoom, getChat } from '../api'
+import { getRoomState, makeMove, resetRoom, saveMyRoom, getChat, leaveRoom } from '../api'
 import { playStoneSound } from '../sound'
 import type { Room as RoomType, PlayerColor, CellState, ChatMessage } from '../types'
 
@@ -31,7 +31,7 @@ export default function Room({ room: initialRoom, nickname, onLeave, isObserver 
   useEffect(() => { if (!isObserver) saveMyRoom(room.id) }, [room.id, isObserver])
 
   const doPoll = useCallback(async () => {
-    const res = await getRoomState(room.id)
+    const res = await getRoomState(room.id, !!isObserver)
     if (res.ok && res.data) {
       setRoom(prev => {
         const next = res.data as RoomType
@@ -104,6 +104,24 @@ export default function Room({ room: initialRoom, nickname, onLeave, isObserver 
     setTimeout(() => setCopied(false), 2000)
   }
 
+  const handleLeave = () => {
+    // 玩家身份退出：通知后端清理房间；观战者直接退出
+    if (!isObserver && nickname) {
+      try {
+        if (navigator.sendBeacon) {
+          const blob = new Blob([JSON.stringify({ roomId: room.id, nickname })], { type: 'application/json' })
+          navigator.sendBeacon('/api/room/leave', blob)
+        } else {
+          // 回退：fire-and-forget
+          leaveRoom(room.id, nickname).catch(() => {})
+        }
+      } catch {
+        // 忽略，不影响退出
+      }
+    }
+    onLeave()
+  }
+
   const isWaiting = room.status === 'waiting'
   const isGameOver = !!room.winner
 
@@ -111,7 +129,7 @@ export default function Room({ room: initialRoom, nickname, onLeave, isObserver 
     <div className="min-h-screen min-h-dvh flex flex-col animate-slide-up">
       {/* Top bar */}
       <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-200 bg-white shrink-0">
-        <button onClick={onLeave} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 transition cursor-pointer px-2 py-1 -ml-2 rounded-lg hover:bg-gray-100">
+        <button onClick={handleLeave} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 transition cursor-pointer px-2 py-1 -ml-2 rounded-lg hover:bg-gray-100">
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
           </svg>

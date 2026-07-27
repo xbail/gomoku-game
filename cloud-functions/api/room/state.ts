@@ -1,6 +1,4 @@
-import { getRoomStrong, saveRoom } from "./_utils";
-
-const HEARTBEAT_INTERVAL_MS = 60_000;
+import { getRoomStrong, touchRoom } from "./_utils";
 
 export async function onRequest(context: { request: Request }) {
   try {
@@ -10,6 +8,7 @@ export async function onRequest(context: { request: Request }) {
 
     const url = new URL(context.request.url);
     const roomId = url.searchParams.get("roomId");
+    const observer = url.searchParams.get("observer") === "1";
 
     if (!roomId?.trim()) {
       return new Response(JSON.stringify({ ok: false, error: "缺少 roomId" }), { status: 400 });
@@ -20,10 +19,9 @@ export async function onRequest(context: { request: Request }) {
       return new Response(JSON.stringify({ ok: false, error: "房间不存在" }), { status: 404 });
     }
 
-    // heartbeat: refresh createdAt for waiting rooms so the TTL resets
-    if (room.status === "waiting" && Date.now() - (room.createdAt ?? 0) > HEARTBEAT_INTERVAL_MS) {
-      room.createdAt = Date.now();
-      await saveRoom(room);
+    // 心跳：仅玩家更新 lastActiveAt（节流，30 秒内不重复写盘）；观战者不养房间
+    if (!observer) {
+      await touchRoom(room);
     }
 
     return new Response(JSON.stringify({ ok: true, data: room }), { status: 200 });
