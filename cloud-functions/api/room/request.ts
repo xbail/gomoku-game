@@ -100,11 +100,26 @@ export default async function onRequest(context: { request: Request }) {
       room.request = null;
 
       if (req.type === "undo") {
-        // 悔棋：撤回上一步（对手上一步），当前回合回到对方
+        // 悔棋：撤回发起方自己刚下的最后一步棋。
+        // 从末尾向前找到属于发起方(req.from)的最后一手，撤回它，
+        // 同时撤回之后对方可能已下的棋子，回合回到发起方。
         if (room.moves && room.moves.length > 0) {
-          const last = room.moves.pop()!;
-          room.board[last.row][last.col] = null;
-          room.currentTurn = last.color;  // 回到落子方
+          // 找到发起方最后一手的索引（从后往前找）
+          const fromColor = req.from;
+          let undoCount = 0;
+          for (let i = room.moves.length - 1; i >= 0; i--) {
+            undoCount++;
+            if ((room.moves[i] as { color: string }).color === fromColor) {
+              break;
+            }
+          }
+          // 撤回 undoCount 步棋子（从末尾开始删）
+          for (let i = 0; i < undoCount; i++) {
+            const last = room.moves.pop() as { row: number; col: number; color: string };
+            room.board[last.row][last.col] = null;
+          }
+          // 回合回到发起方
+          room.currentTurn = fromColor;
           // 禁手已触发终局的悔棋：清除终局状态
           if (room.winner && !room.timeLoser) {
             room.winner = null;
