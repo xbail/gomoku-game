@@ -6,12 +6,25 @@ interface WaitingRoom {
   createdAt: number;
 }
 
+interface PlayingRoom {
+  id: string;
+  blackNickname: string;
+  whiteNickname: string;
+  createdAt: number;
+}
+
+interface RoomList {
+  waiting: WaitingRoom[];
+  playing: PlayingRoom[];
+}
+
 const WAITING_TTL_MS = 3 * 60 * 1000; // 3 minutes
 
 export async function onRequest() {
   try {
     const result = await store.list();
-    const rooms: WaitingRoom[] = [];
+    const waiting: WaitingRoom[] = [];
+    const playing: PlayingRoom[] = [];
     const now = Date.now();
 
     for (const blob of result.blobs) {
@@ -19,20 +32,29 @@ export async function onRequest() {
       if (!data) continue;
       try {
         const room = JSON.parse(data);
-        if (room.status !== "waiting") continue;
+        if (room.status === "waiting") {
+          // clean up stale waiting rooms
+          if (now - (room.createdAt ?? 0) > WAITING_TTL_MS) {
+            await store.delete(blob.key);
+            continue;
+          }
 
-        // clean up stale waiting rooms
-        if (now - (room.createdAt ?? 0) > WAITING_TTL_MS) {
-          await store.delete(blob.key);
-          continue;
-        }
-
-        if (room.players?.black?.nickname) {
-          rooms.push({
-            id: room.id,
-            blackNickname: room.players.black.nickname,
-            createdAt: room.createdAt ?? 0,
-          });
+          if (room.players?.black?.nickname) {
+            waiting.push({
+              id: room.id,
+              blackNickname: room.players.black.nickname,
+              createdAt: room.createdAt ?? 0,
+            });
+          }
+        } else if (room.status === "playing" && !room.winner) {
+          if (room.players?.black?.nickname && room.players?.white?.nickname) {
+            playing.push({
+              id: room.id,
+              blackNickname: room.players.black.nickname,
+              whiteNickname: room.players.white.nickname,
+              createdAt: room.createdAt ?? 0,
+            });
+          }
         }
       } catch {
         // skip malformed entries
@@ -40,9 +62,10 @@ export async function onRequest() {
     }
 
     // newest first
-    rooms.sort((a, b) => b.createdAt - a.createdAt);
+    waiting.sort((a, b) => b.createdAt - a.createdAt);
+    playing.sort((a, b) => b.createdAt - a.createdAt);
 
-    return new Response(JSON.stringify({ ok: true, data: rooms }), { status: 200 });
+    return new Response(JSON.stringify({ ok: true, data: { waiting, playing } }), { status: 200 });
   } catch (e) {
     return new Response(JSON.stringify({ ok: false, error: String(e) }), { status: 500 });
   }

@@ -2,35 +2,49 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import Board from '../components/Board'
 import ChatPanel from '../components/ChatPanel'
 import { getRoomState, makeMove, resetRoom, saveMyRoom, getChat } from '../api'
-import type { Room as RoomType, PlayerColor, ChatMessage } from '../types'
+import { playStoneSound } from '../sound'
+import type { Room as RoomType, PlayerColor, CellState, ChatMessage } from '../types'
 
 interface RoomProps {
   room: RoomType
   nickname: string
   onLeave: () => void
+  isObserver?: boolean
 }
 
 const POLL_INTERVAL = 500
 
-export default function Room({ room: initialRoom, nickname, onLeave }: RoomProps) {
+export default function Room({ room: initialRoom, nickname, onLeave, isObserver }: RoomProps) {
   const [room, setRoom] = useState<RoomType>(initialRoom)
   const [lastMove, setLastMove] = useState<[number, number] | null>(null)
   const [copied, setCopied] = useState(false)
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>(room.messages || [])
   const pollingRef = useRef<ReturnType<typeof setInterval>>(undefined)
 
-  const myColor: PlayerColor | null =
-    room.players.black.nickname === nickname ? 'black'
+  const myColor: PlayerColor | null = isObserver
+    ? null
+    : room.players.black.nickname === nickname ? 'black'
     : room.players.white?.nickname === nickname ? 'white'
     : null
 
-  // Save room for rejoin on enter
-  useEffect(() => { saveMyRoom(room.id) }, [room.id])
+  // Save room for rejoin on enter (observers don't save)
+  useEffect(() => { if (!isObserver) saveMyRoom(room.id) }, [room.id, isObserver])
 
   const doPoll = useCallback(async () => {
     const res = await getRoomState(room.id)
     if (res.ok && res.data) {
-      setRoom(res.data)
+      setRoom(prev => {
+        const next = res.data as RoomType
+        // Detect a newly placed stone and highlight + play sound
+        if (countOccupied(next.board) > countOccupied(prev.board)) {
+          const move = findNewMove(prev.board, next.board)
+          if (move) {
+            setLastMove(move)
+            playStoneSound()
+          }
+        }
+        return next
+      })
     }
   }, [room.id])
 
@@ -42,11 +56,13 @@ export default function Room({ room: initialRoom, nickname, onLeave }: RoomProps
   const scheduleForcePoll = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   const handleCellClick = async (row: number, col: number) => {
+    if (isObserver) return
     if (room.board[row][col]) return
     const res = await makeMove(room.id, nickname, row, col)
     if (res.ok && res.data) {
       setRoom(res.data)
       setLastMove([row, col])
+      playStoneSound()
       if (scheduleForcePoll.current) clearTimeout(scheduleForcePoll.current)
       scheduleForcePoll.current = setTimeout(() => doPoll(), 100)
     }
@@ -112,12 +128,25 @@ export default function Room({ room: initialRoom, nickname, onLeave }: RoomProps
 
           <button
             onClick={handleCopyRoomId}
-            className="text-xs px-2.5 py-1 rounded-full border border-gray-300 text-gray-500 hover:text-gray-800 hover:border-gray-400 transition cursor-pointer"
+            className={`text-xs px-2.5 py-1 rounded-full border border-gray-300 text-gray-500 hover:text-gray-800 hover:border-gray-400 transition cursor-pointer ${isObserver ? 'hidden' : ''}`}
           >
             {copied ? '✓ 已复制' : '邀请好友'}
           </button>
         </div>
       </div>
+
+      {/* Observer banner */}
+      {isObserver && (
+        <div className="flex justify-center shrink-0 py-1">
+          <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-[11px] font-medium">
+            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+            </svg>
+            观战模式 · 只读不参与
+          </div>
+        </div>
+      )}
 
       {/* Player info strip */}
       <div className="flex items-center justify-between px-3 py-2.5 border-b border-gray-100 bg-gray-50/80 shrink-0">
@@ -184,17 +213,18 @@ export default function Room({ room: initialRoom, nickname, onLeave }: RoomProps
           winner={room.winner}
           onCellClick={handleCellClick}
           lastMove={lastMove}
+          readOnly={isObserver}
         />
       </div>
 
       {/* Chat panel */}
       {room.status !== 'waiting' && (
-        <ChatPanel roomId={room.id} nickname={nickname} messages={chatMessages} onMessagesUpdate={refreshChat} />
+        <ChatPanel roomId={room.id} nickname={nickname} messages={chatMessages} onMessagesUpdate={refreshChat} readOnly={isObserver} />
       )}
 
       {/* Bottom action area */}
       <div className="shrink-0 pb-5 pt-2 flex flex-col items-center gap-2">
-        {isGameOver && (
+        {isGameOver && !isObserver && (
           <button
             onClick={handleReset}
             className="flex items-center gap-2 px-10 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-xl text-sm font-semibold shadow-lg shadow-indigo-900/20 transition-all active:scale-95 cursor-pointer"
@@ -205,12 +235,12 @@ export default function Room({ room: initialRoom, nickname, onLeave }: RoomProps
             再来一局
           </button>
         )}
-        {!isGameOver && !isWaiting && (
+        {!isGameOver && !isWaiting && !isObserver && (
           <div className="text-[11px] text-gray-400 font-medium tracking-wide">
             {room.currentTurn === myColor ? '请在棋盘上落子' : '等待对手落子...'}
           </div>
         )}
-        {isWaiting && (
+        {isWaiting && !isObserver && (
           <div className="text-[11px] text-gray-400 font-medium tracking-wide">
             将房间 ID 分享给好友
           </div>
@@ -225,8 +255,26 @@ function statusText(room: RoomType, myColor: PlayerColor | null): string {
   if (room.winner === 'draw') return '平局'
   if (room.winner === 'black') return `${room.players.black.nickname} 获胜!`
   if (room.winner === 'white') return `${room.players.white?.nickname} 获胜!`
+  if (myColor === null) return '观战中'
   if (room.currentTurn === myColor) return '你的回合'
   return '对手回合'
+}
+
+// 统计棋盘上已落子数
+function countOccupied(board: CellState[][]): number {
+  let n = 0
+  for (const row of board) for (const c of row) if (c) n++
+  return n
+}
+
+// 找出新增落子的位置
+function findNewMove(prev: CellState[][], next: CellState[][]): [number, number] | null {
+  for (let r = 0; r < next.length; r++) {
+    for (let c = 0; c < next[r].length; c++) {
+      if (!prev[r]?.[c] && next[r][c]) return [r, c]
+    }
+  }
+  return null
 }
 
 function PlayerInfo({

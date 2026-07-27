@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { createRoom, joinRoom, listRooms, rejoinRoom, getMyRooms, removeMyRoom } from '../api'
-import type { Room, WaitingRoomInfo } from '../types'
+import { createRoom, joinRoom, listRooms, rejoinRoom, getMyRooms, removeMyRoom, observeRoom } from '../api'
+import type { Room, WaitingRoomInfo, PlayingRoomInfo } from '../types'
 
 interface HomeProps {
   nickname: string
@@ -9,20 +9,25 @@ interface HomeProps {
   onLeaderboard: () => void
   onUserCenter: () => void
   onEnter: (room: Room, nickname: string) => void
+  onObserve: (room: Room) => void
 }
 
-export default function Home({ nickname: initialNickname, avatar, onLogout, onLeaderboard, onUserCenter, onEnter }: HomeProps) {
+export default function Home({ nickname: initialNickname, avatar, onLogout, onLeaderboard, onUserCenter, onEnter, onObserve }: HomeProps) {
   const [nickname, setNickname] = useState(initialNickname)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [waitingRooms, setWaitingRooms] = useState<WaitingRoomInfo[]>([])
+  const [playingRooms, setPlayingRooms] = useState<PlayingRoomInfo[]>([])
   const [myRoomsData, setMyRoomsData] = useState<Room[]>([])
   const inputRef = useRef<HTMLInputElement>(null)
 
   // Refresh rooms list
   const fetchRooms = useCallback(async () => {
     const res = await listRooms()
-    if (res.ok && res.data) setWaitingRooms(res.data)
+    if (res.ok && res.data) {
+      setWaitingRooms(res.data.waiting)
+      setPlayingRooms(res.data.playing)
+    }
   }, [])
 
   // Refresh my saved rooms
@@ -84,6 +89,17 @@ export default function Home({ nickname: initialNickname, avatar, onLogout, onLe
     } else {
       removeMyRoom(roomId)
       setError(res.error || '无法重进房间')
+    }
+  }
+
+  const handleObserve = async (roomId: string) => {
+    setLoading(true); setError('')
+    const res = await observeRoom(roomId)
+    setLoading(false)
+    if (res.ok && res.data) {
+      onObserve(res.data)
+    } else {
+      setError(res.error || '观战失败')
     }
   }
 
@@ -237,6 +253,43 @@ export default function Home({ nickname: initialNickname, avatar, onLogout, onLe
             </div>
           )}
         </div>
+
+        {/* Spectate rooms */}
+        {playingRooms.length > 0 && (
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mt-4">
+            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+              <h2 className="text-sm font-medium text-gray-500">对战中 · 可观战</h2>
+              <button onClick={fetchRooms} className="text-xs text-gray-400 hover:text-gray-600 transition cursor-pointer">刷新</button>
+            </div>
+
+            <div className="divide-y divide-gray-100 max-h-[280px] overflow-y-auto">
+              {playingRooms.map((r) => (
+                <button key={r.id} onClick={() => { setError(''); handleObserve(r.id) }} disabled={loading} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition text-left cursor-pointer disabled:opacity-50">
+                  <div className="shrink-0 w-10 h-10 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center">
+                    <svg className="w-4 h-4 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-mono tracking-wider text-indigo-600">{r.id}</span>
+                      <span className="text-[10px] px-1.5 py-px rounded-full bg-amber-50 text-amber-600 border border-amber-200 shrink-0">观战中</span>
+                    </div>
+                    <div className="text-xs text-gray-400 mt-0.5">{r.blackNickname} vs {r.whiteNickname}</div>
+                  </div>
+                  <svg className="w-4 h-4 text-gray-300 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              ))}
+            </div>
+
+            <div className="px-4 py-2 border-t border-gray-100 text-center">
+              <span className="text-[10px] text-gray-300">共 {playingRooms.length} 个对局 · 观战不参与游戏</span>
+            </div>
+          </div>
+        )}
 
         <p className="text-center text-[11px] text-gray-300 mt-6">Gomoku Online · EdgeOne Makers</p>
       </div>

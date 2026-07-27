@@ -8,14 +8,16 @@ interface BoardProps {
   winner: PlayerColor | 'draw' | null
   onCellClick: (row: number, col: number) => void
   lastMove: [number, number] | null
+  readOnly?: boolean
 }
 
 const N = 15
 const GAPS = N - 1
 const FRAME_PX = 8
 
-export default function Board({ board, currentTurn, myColor, winner, onCellClick, lastMove }: BoardProps) {
+export default function Board({ board, currentTurn, myColor, winner, onCellClick, lastMove, readOnly }: BoardProps) {
   const isMyTurn = myColor === currentTurn && !winner
+  const interactive = !readOnly
   const [toast, setToast] = useState<string | null>(null)
   const [selectedCell, setSelectedCell] = useState<[number, number] | null>(null)
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
@@ -27,6 +29,7 @@ export default function Board({ board, currentTurn, myColor, winner, onCellClick
   }, [])
 
   const handleClick = useCallback((ri: number, ci: number) => {
+    if (!interactive) return
     const cell = board[ri][ci]
     if (winner) { showToast('游戏已结束'); return }
     if (!myColor) { showToast('你不是本局玩家'); return }
@@ -39,7 +42,7 @@ export default function Board({ board, currentTurn, myColor, winner, onCellClick
     } else {
       setSelectedCell([ri, ci])
     }
-  }, [board, currentTurn, myColor, winner, showToast, selectedCell])
+  }, [board, currentTurn, myColor, winner, showToast, selectedCell, interactive])
 
   const handleConfirm = () => {
     if (!selectedCell) return
@@ -60,7 +63,7 @@ export default function Board({ board, currentTurn, myColor, winner, onCellClick
     return pts
   }, [])
 
-  const boardPx = 'min(96vw, 640px)'
+  const boardPx = 'min(94vw, 72vh, 720px)'
   const intersectionPct = (i: number) => `${(i / GAPS) * 100}%`
   const hitPct = `${100 / GAPS}%`
 
@@ -109,13 +112,13 @@ export default function Board({ board, currentTurn, myColor, winner, onCellClick
             row.map((cell, ci) => {
               const isLast = lastMove?.[0] === ri && lastMove?.[1] === ci
               const isSelected = selectedCell?.[0] === ri && selectedCell?.[1] === ci
-              const canPlace = !cell && !winner && isMyTurn
+              const canPlace = !cell && !winner && isMyTurn && interactive
 
               return (
                 <div
                   key={`${ri}-${ci}`}
                   onClick={() => handleClick(ri, ci)}
-                  className="intersection-cell absolute z-10"
+                  className={`intersection-cell absolute z-10 ${!interactive ? 'cursor-default' : ''}`}
                   style={{
                     left: intersectionPct(ci),
                     top: intersectionPct(ri),
@@ -139,14 +142,20 @@ export default function Board({ board, currentTurn, myColor, winner, onCellClick
                         style={{ width: '82%', paddingBottom: '82%' }} />
                     )}
 
+                    {/* Last-move highlight ring (outside stone) */}
+                    {isLast && (
+                      <div className="absolute rounded-full ring-2 ring-red-500 animate-last-pulse pointer-events-none"
+                        style={{ width: '92%', height: '92%' }} />
+                    )}
+
                     {/* Stone */}
                     {cell && (
-                      <div className={`absolute rounded-full ${cell === 'black' ? 'stone-black' : 'stone-white'} ${isLast ? 'ring-2 ring-red-400' : ''}`}
+                      <div className={`absolute rounded-full ${cell === 'black' ? 'stone-black' : 'stone-white'}`}
                         style={{ width: '82%', height: '82%' }}
                       >
                         {isLast && (
                           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                            <div className={`w-[22%] h-[22%] rounded-full ${cell === 'black' ? 'bg-red-400' : 'bg-red-500'}`} />
+                            <div className={`w-[26%] h-[26%] rounded-full ${cell === 'black' ? 'bg-red-400' : 'bg-red-500'} shadow-md`} />
                           </div>
                         )}
                       </div>
@@ -181,7 +190,7 @@ export default function Board({ board, currentTurn, myColor, winner, onCellClick
       )}
 
       {/* Turn indicator */}
-      {isMyTurn && !winner && !selectedCell && (
+      {isMyTurn && !winner && !selectedCell && interactive && (
         <div className="flex justify-center mt-2">
           <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-green-600 text-[11px] text-white font-medium shadow-lg border border-green-500/40 pointer-events-none">
             <span className="relative flex h-2 w-2">

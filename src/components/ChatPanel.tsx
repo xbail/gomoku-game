@@ -7,11 +7,12 @@ interface ChatPanelProps {
   nickname: string
   messages: { nickname: string; type: string; content: string; time: number }[]
   onMessagesUpdate: () => void
+  readOnly?: boolean
 }
 
 const QUICK_TEXTS = ['下这里', '好棋', '失误了', '哈哈', '加油', '再来']
 
-export default function ChatPanel({ roomId, nickname, messages, onMessagesUpdate }: ChatPanelProps) {
+export default function ChatPanel({ roomId, nickname, messages, onMessagesUpdate, readOnly }: ChatPanelProps) {
   const [toastList, setToastList] = useState<{ id: number; msg: string }[]>([])
   const idRef = useRef(0)
   const prevLen = useRef(messages.length)
@@ -49,15 +50,20 @@ export default function ChatPanel({ roomId, nickname, messages, onMessagesUpdate
       </div>
 
       {/* Quick buttons */}
-      <div className="flex flex-wrap gap-1.5 items-center">
-        {CHAT_EMOJIS.map(e => (
-          <button key={e} onClick={() => doSend('emoji', e)} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100 text-sm transition cursor-pointer">{e}</button>
-        ))}
-        <span className="w-px h-4 bg-gray-200 mx-0.5" />
-        {QUICK_TEXTS.map(t => (
-          <button key={t} onClick={() => doSend('text', t)} className="px-2 py-0.5 text-[11px] rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 transition cursor-pointer">{t}</button>
-        ))}
-      </div>
+      {!readOnly && (
+        <div className="flex flex-wrap gap-1.5 items-center">
+          {CHAT_EMOJIS.map(e => (
+            <button key={e} onClick={() => doSend('emoji', e)} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100 text-sm transition cursor-pointer">{e}</button>
+          ))}
+          <span className="w-px h-4 bg-gray-200 mx-0.5" />
+          {QUICK_TEXTS.map(t => (
+            <button key={t} onClick={() => doSend('text', t)} className="px-2 py-0.5 text-[11px] rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 transition cursor-pointer">{t}</button>
+          ))}
+        </div>
+      )}
+      {readOnly && (
+        <div className="text-[11px] text-gray-300 text-center py-1">观战中无法发言</div>
+      )}
     </div>
   )
 }

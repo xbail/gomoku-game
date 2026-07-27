@@ -26,6 +26,18 @@ export interface WaitingRoomInfo {
   createdAt: number
 }
 
+export interface PlayingRoomInfo {
+  id: string
+  blackNickname: string
+  whiteNickname: string
+  createdAt: number
+}
+
+export interface RoomList {
+  waiting: WaitingRoomInfo[]
+  playing: PlayingRoomInfo[]
+}
+
 export interface UserInfo {
   socialUid: string
   nickname: string

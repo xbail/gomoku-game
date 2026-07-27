@@ -1,4 +1,4 @@
-import type { ApiResponse, Room, WaitingRoomInfo, LoginUrlResult, UserInfo, ChatMessage, LeaderboardEntry } from './types'
+import type { ApiResponse, Room, RoomList, LoginUrlResult, UserInfo, ChatMessage, LeaderboardEntry } from './types'
 
 const BASE = '/api/room'
 
@@ -67,7 +67,12 @@ export function resetRoom(roomId: string, nickname: string) {
 }
 
 export function listRooms() {
-  return request<WaitingRoomInfo[]>(`${BASE}/list`)
+  return request<RoomList>(`${BASE}/list`)
+}
+
+// 观战：进入指定房间（只读）
+export function observeRoom(roomId: string) {
+  return request<Room>(`${BASE}/state?roomId=${encodeURIComponent(roomId)}`)
 }
 
 export function getLoginUrl(type: string) {

@@ -14,6 +14,7 @@ export default function App() {
   const [nickname, setNickname] = useState<string | null>(null)
   const [avatar, setAvatar] = useState<string>('')
   const [roomState, setRoomState] = useState<{ room: RoomType; nickname: string } | null>(null)
+  const [observeRoom, setObserveRoom] = useState<RoomType | null>(null)
   const [isCallback, setIsCallback] = useState(false)
   const [page, setPage] = useState<Page>('home')
 
@@ -38,10 +39,22 @@ export default function App() {
     clearUserInfo()
     setNickname(null)
     setRoomState(null)
+    setObserveRoom(null)
   }
 
   if (isCallback) {
     return <Callback onLoggedIn={handleLoggedIn} />
+  }
+
+  if (observeRoom) {
+    return (
+      <Room
+        room={observeRoom}
+        nickname=""
+        isObserver
+        onLeave={() => setObserveRoom(null)}
+      />
+    )
   }
 
   if (roomState) {
@@ -67,6 +80,7 @@ export default function App() {
             onLeaderboard={() => setPage('leaderboard')}
             onUserCenter={() => setPage('user')}
             onEnter={(room, name) => setRoomState({ room, nickname: name })}
+            onObserve={(room) => setObserveRoom(room)}
           />
         )}
       </>
